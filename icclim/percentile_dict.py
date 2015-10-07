@@ -187,7 +187,7 @@ def get_percentile_dict(arr, dt_arr, percentile, window_width, only_leap_years=F
     Creates a dictionary with keys=calendar day (month,day) and values=numpy.ndarray (2D)
     Example - to get the 2D percentile array corresponding to the 15th Mai: percentile_dict[5,15]
     
-    :param arr: array of values (in case of precipitation, units must be `mm/s`)
+    :param arr: array of values 
     :type arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D) of float
     
     :param dt_arr: corresponding time steps vector (base period: usually 1961-1990)
@@ -321,7 +321,7 @@ def get_percentile_arr(arr, percentile, window_width, callback=None, callback_pe
     Creates a dictionary with keys=calendar day (month,day) and values=numpy.ndarray (2D)
     Example - to get the 2D percentile array corresponding to the 15th Mai: percentile_dict[5,15]
     
-    :param arr: array of values (in case of precipitation, units must be `mm/s`)
+    :param arr: array of values (in case of precipitation, units must be `mm/day`)
     :type arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D) of float
     
     :param dt_arr: corresponding time steps vector (base period: usually 1961-1990)
@@ -348,8 +348,8 @@ def get_percentile_arr(arr, percentile, window_width, callback=None, callback_pe
     :param chunk_counter: chunk counter in case of chunking 
     :type chunk_counter: int
     
-    :param precipitation: just to inticate if ``arr`` is precipitation (`True`) or other variable (`False`) to process data differently (default: False) 
-    :type precipitation: bool
+    :param precipitation: if True, only values >=1.0 mm will be processed (i.e. wet days) 
+    :type precipitation: bool    
     
     :param fill_val: fill value of ``arr``
     :type fill_val: float
@@ -367,27 +367,28 @@ def get_percentile_arr(arr, percentile, window_width, callback=None, callback_pe
     
     fill_val = arr_masked.fill_value
     
-            
-    if precipitation == True:
+    ### not precipitation
+    if precipitation == False: 
+        arr_filled = arr_masked.filled(fill_val) 
+        
+        del arr_masked
+        
+    ### precipitation
+    else:
 
-        arr_masked = arr_masked*60*60*24 # mm/s --> mm/day
-
-        # 2) we need to process only wet days (i.e. days with RR >= 1.0 mm)
+        # we need to process only wet days (i.e. days with RR >= 1.0 mm)
         # => we mask values < 1.0 mm 
         mask_arr_masked = arr_masked < 1.0 # new mask of the masked array 
         arr_masked_masked = numpy.ma.array(arr_masked, mask=mask_arr_masked)
-         
-        # 3) we fill all masked values with fill_val to pass the filled array to the C function
+     
+        # we fill all masked values with fill_val to pass the filled array to the C function
         arr_filled = arr_masked_masked.filled(fill_val)
 
         del arr_masked, mask_arr_masked, arr_masked_masked
-        
-    else:
-        arr_filled = arr_masked.filled(fill_val)
-        del arr_masked
+
           
 
-    ############################## prepare calling C function   
+    ############################## prepare calling C function
     # data type should be 'float32' to pass it to C function
     if arr_filled.dtype != 'float32':
         arr_filled = numpy.array(arr_filled, dtype='float32')

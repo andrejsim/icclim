@@ -34,6 +34,8 @@ import time_subset
 import maps
 # import xyz
 
+import util.user_indice as ui
+
 import sys
 
 
@@ -41,22 +43,22 @@ def get_key_by_value_from_dict(my_map, my_value):
     for key in my_map.keys():
         if my_value in my_map[key]:
             return key
-
+    if my_value not in my_map.keys():
+        return 'user_indice'
 
        
 def indice(indice_name,
            in_files,
            var_name,           
-           slice_mode=None,
+           slice_mode='year',
            time_range=None,
            out_file="./icclim_out.nc",
            threshold=None,
            N_lev=None,
            transfer_limit_Mbytes=None,
            callback=None,
-            callback_percentage_start_value=0,  # ?
-            callback_percentage_total=100,      # ?
-           #time_range2=None,
+            callback_percentage_start_value=0,  
+            callback_percentage_total=100, 
             base_period_time_range=None,
             window_width=5,
             only_leap_years=False,
@@ -64,6 +66,7 @@ def indice(indice_name,
             interpolation='hyndman_fan', 
             save_percentiles_to_file=None, # [file_name, option], option: 'a', 'b'
             out_unit='days',
+            user_indice=None
             ):
 
     
@@ -134,16 +137,31 @@ def indice(indice_name,
     .. warning:: Precipitation input units are considered to be in [kg m-2 s-1]. i.e. in [mm/s].
     '''
     
+    if indice_name==None:
+        if user_indice==None:
+            raise IOError(" 'user_indice' is required as a dictionary with user defined parameters.")
+        else:
+            ui.check_params(user_indice)
+            indice_name=user_indice['indice_name']
+            user_indice_perc = (user_indice['calc_operation']=='nb_events' and type(user_indice['thresh'])==str)
+            
+            if (('date_event' in user_indice) and user_indice['calc_operation'] in ['mean', 'sum']) or ('date_event' not in user_indice):
+                user_indice['date_event']=False
+
+      
+    
     #####    we define the type of selected indice
     #####    (simple_time_aggregation and multiperiod are statistics and not indices, so threshold is ignored in those cases)
     indice_type = get_key_by_value_from_dict(maps.map_indice_type, indice_name) # 'simple'/'multivariable'/'multiperiod'/'simple_time_aggregation'/'percentile_based'/'percentile_based_multivariable'
     
+    if indice_type == 'user_indice':
+        if user_indice_perc:
+            indice_type = 'user_indice_perc'
+        else:
+            indice_type = 'user_indice'
+    
     if (indice_type=='percentile_based' or indice_type=='percentile_based_multivariable') and base_period_time_range==None:
         raise IOError('Time range of base period is required for percentile-based indices! Please, set the "base_period_time_range" parameter.')
-    
-    #####    slice_mode
-    if slice_mode == None:
-        slice_mode = 'month'
 
     
     #####    input files and target variable names 
@@ -172,8 +190,8 @@ def indice(indice_name,
 
     #####    callback
     if callback != None:
-        global percentage_current_key        
-        percentage_current_key = callback_percentage_start_value
+        global percentage_current_slice        
+        percentage_current_slice = callback_percentage_start_value
     
     #####    we check if output path exists
     out_path = os.path.dirname(os.path.abspath(out_file)) + os.sep
@@ -239,25 +257,15 @@ def indice(indice_name,
 
     #####    we copy attributes from variable to process to indice variable, except scale_factor and _FillValue
     util_nc.copy_var_attrs(ncVar, ind)
-
     
-#     #####    we check for "time_range"
-#     try:
-#         calend = ncVar_time.calendar
-#     except:
-#         calend = 'gregorian'
-#     
-#     units = ncVar_time.units
-# 
-#     
-#     if time_range == None:
-#         time_range = util_dt.get_time_range(VARS_in_files[var_name[0]], temporal_var_name=indice_dim[0])
-#         
-#     else: # i.e. time_range is selected by user
-#         # we adjust datetime.datetime objects from time_range 
-#         t_arr = inc.variables[indice_dim[0]][:]
-#         dt = util_dt.num2date(t_arr[0], calend, units)
-#         time_range = util_dt.adjust_time_range(time_range, dt)
+    # we create new variable(s) to save date of event
+    if indice_type in ['user_indice', 'user_indice_perc'] and user_indice['date_event']==True:
+        if user_indice['calc_operation'] in ['min', 'max']:            
+            date_event = onc.createVariable('date_event', 'f', indice_dim, fill_value = fill_val)
+        elif user_indice['calc_operation'] in ['nb_events', 'max_number_consecutive_events', 'run_mean', 'run_sum']:
+            date_event_start = onc.createVariable('date_event_start', 'f', indice_dim, fill_value = fill_val)
+            date_event_end = onc.createVariable('date_event_end', 'f', indice_dim, fill_value = fill_val)
+    
     
     
     time_range = util_dt.get_time_range(files=VARS_in_files[var_name[0]], time_range=time_range, temporal_var_name=indice_dim[0])
@@ -316,6 +324,10 @@ def indice(indice_name,
         dict_files_years_to_process = files_order.get_dict_files_years_to_process_in_correct_order(files_list=VARS_in_files[v], time_range=time_range)  
         
         VARS[v]['files_years'] = dict_files_years_to_process 
+        
+        if indice_type in ["percentile_based", "percentile_based_multivariable", 'user_indice_perc']:
+            dict_files_years_to_process_base = files_order.get_dict_files_years_to_process_in_correct_order(files_list=VARS_in_files[v], time_range=base_period_time_range)
+            VARS[v]['files_years_base'] = dict_files_years_to_process_base
 
         dim_name = util_nc.check_unlimited(VARS_in_files[v][0])
         tile_dimension = arr_size.get_tile_dimension(in_files=dict_files_years_to_process.keys(), 
@@ -396,8 +408,8 @@ def indice(indice_name,
                 var_scale = 1.0
                 if var_units == 'degC' or var_units == 'Celcius': #Kelvin
                     var_add = var_add + 273.15
-                elif var_units == 'mm': # kg m-2 s-1 (mm/s)
-                    var_scale = var_scale / 86400.0
+                elif var_units in ["mm/s", "mm/sec", "kg m-2 s-1"]: # mm/s --> mm/day
+                    var_scale = var_scale * 86400.0
                     
                 VARS[v]['unit_conversion_var_add']=var_add
                 VARS[v]['unit_conversion_var_scale']=var_scale
@@ -433,8 +445,10 @@ def indice(indice_name,
             VARS[v]['dt_arr']=arrs_current_chunk[0]
             VARS[v]['values_arr']=arrs_current_chunk[1] 
 
-            if indice_type == "percentile_based" or indice_type == "percentile_based_multivariable":
-
+            if indice_type in ["percentile_based", "percentile_based_multivariable", 'user_indice_perc']:
+                ncb = MFDataset(VARS[v]['files_years_base'].keys(), 'r', aggdim=dim_name)
+                var_time = ncb.variables[indice_dim[0]]
+                var = ncb.variables[v]
                 arrs_base_current_chunk = util_nc.get_values_arr_and_dt_arr(ncVar_temporal=var_time, ncVar_values=var, 
                                                                             fill_val=VARS[v]['fill_value'], 
                                                                             time_range=base_period_time_range, 
@@ -446,6 +460,8 @@ def indice(indice_name,
                                                                              i2_row_current_tile=i2_row_current_tile,
                                                                              i1_col_current_tile=i1_col_current_tile,
                                                                              i2_col_current_tile=i2_col_current_tile)
+                
+                ncb.close()
                                                         
 #                 dt_arr_base = arrs_base_current_chunk[0]    
 #                 values_arr_base = arrs_base_current_chunk[1]
@@ -505,9 +521,19 @@ def indice(indice_name,
                                                         callback=callback, callback_percentage_total=callback_percentage_total,
                                                         ignore_Feb29th=ignore_Feb29th, interpolation=interpolation,
                                                         percentiles_to_file=save_percentiles_to_file,
-                                                        out_unit=out_unit) ## tuple: (dt_centroid_arr, dt_bounds_arr, indice_arr) 
+                                                        out_unit=out_unit,
+                                                        user_indice=user_indice) ## tuple: (dt_centroid_arr, dt_bounds_arr, indice_arr) 
     
             indice_arr_current_chunk = indice_tuple_current_chunk[2]
+            
+            if indice_type in ['user_indice', 'user_indice_perc']:
+                if user_indice['date_event']==True:
+                    if user_indice['calc_operation'] in ['min', 'max']:            
+                        date_event_arr_current_chunk = indice_tuple_current_chunk[3]
+                        
+                    elif user_indice['calc_operation'] in ['nb_events', 'max_number_consecutive_events', 'run_mean', 'run_sum']:
+                        date_event_start_arr_current_chunk = indice_tuple_current_chunk[3]
+                        date_event_end_arr_current_chunk = indice_tuple_current_chunk[4]
             
             
             if indice_type == 'simple_time_aggregation':
@@ -531,7 +557,8 @@ def indice(indice_name,
 #                                                                     VARS_dict_temporal_slices=VARS_temporal_slices,
                                                                     vars_dict=VARS,
                                                                     thresh=t,
-                                                                    callback=callback, callback_percentage_total=callback_percentage_total)  ## tuple: (dt_centroid_arr, dt_bounds_arr, indice_arr)         
+                                                                    callback=callback, callback_percentage_total=callback_percentage_total,
+                                                                    user_indice=user_indice)  ## tuple: (dt_centroid_arr, dt_bounds_arr, indice_arr)         
                 
                 
                 indice_arr_current_chunk = indice_tuple_current_chunk[2]
@@ -568,38 +595,48 @@ def indice(indice_name,
         for t,key in zip(range(nb_user_thresholds),dict_threshold_indice_arr.keys()):               
                 ind[:,t,:,:] = dict_threshold_indice_arr[key][:,:,:]
 
-
-
-    # set global attributes
-    
-    # title
-    if threshold != None:
-        onc.setncattr('title', 'Indice {0} with user defined threshold'.format(indice_name))
-    else:
-        set_globattr.title(onc, indice_name)
+    if indice_type in ['user_indice', 'user_indice_perc']:
+        if user_indice['date_event']==True:
+            if user_indice['calc_operation'] in ['min', 'max']:            
+                date_event[:,:,:] = date_event_arr_current_chunk
+            elif user_indice['calc_operation'] in ['nb_events', 'max_number_consecutive_events', 'run_mean', 'run_sum']:
+                date_event_start[:,:,:] = date_event_start_arr_current_chunk
+                date_event_end[:,:,:] = date_event_end_arr_current_chunk
         
-    set_globattr.references(onc)
-    set_globattr.comment(onc, indice_name)
-    set_globattr.institution(onc, institution_str='Climate impact portal (http://climate4impact.eu)')
-    set_globattr.history2(onc, slice_mode, indice_name, time_range)
-    onc.setncattr('source', '')
-    onc.setncattr('Conventions','CF-1.6')
     
     
-    # set variable attributes
-    if indice_type == 'simple_time_aggregation' or indice_type == 'multiperiod':    
-        eval('set_longname_units.' + indice_name + '_setvarattr(ind, var_longname, var_units)')
-        ind.setncattr('standard_name', var_standardname)
-    else:
-        if threshold == None:
-            eval('set_longname_units.' + indice_name + '_setvarattr(ind)')
-            ind.setncattr('standard_name', 'ECA_indice')         
+    
+    if indice_type not in ['user_indice', 'user_indice_perc']:        
+        # set global attributes
+        
+        # title
+        if threshold != None:
+            onc.setncattr('title', 'Indice {0} with user defined threshold'.format(indice_name))
         else:
-            eval('set_longname_units_custom_indices.' + indice_name + '_setvarattr(ind, threshold)')
-            ind.setncattr('standard_name', 'ECA_indice with user defined threshold')
+            set_globattr.title(onc, indice_name)
             
-            if nb_user_thresholds > 1:
-                eval('set_longname_units_custom_indices.' + indice_name + '_setthresholdattr(thresholdvar)')
+        set_globattr.references(onc)
+        set_globattr.comment(onc, indice_name)
+        set_globattr.institution(onc, institution_str='Climate impact portal (http://climate4impact.eu)')
+        set_globattr.history2(onc, slice_mode, indice_name, time_range)
+        onc.setncattr('source', '')
+        onc.setncattr('Conventions','CF-1.6')
+        
+        
+        # set variable attributes
+        if indice_type == 'simple_time_aggregation' or indice_type == 'multiperiod':    
+            eval('set_longname_units.' + indice_name + '_setvarattr(ind, var_longname, var_units)')
+            ind.setncattr('standard_name', var_standardname)
+        else:
+            if threshold == None:
+                eval('set_longname_units.' + indice_name + '_setvarattr(ind)')
+                ind.setncattr('standard_name', 'ECA_indice')         
+            else:
+                eval('set_longname_units_custom_indices.' + indice_name + '_setvarattr(ind, threshold)')
+                ind.setncattr('standard_name', 'ECA_indice with user defined threshold')
+                
+                if nb_user_thresholds > 1:
+                    eval('set_longname_units_custom_indices.' + indice_name + '_setthresholdattr(thresholdvar)')
         
     # for all:
     ind.missing_value = fill_val
@@ -642,17 +679,38 @@ def get_indice_from_dict_temporal_slices(indice_name,
                                           callback=None, callback_percentage_start_value=0, callback_percentage_total=100,
                                           ignore_Feb29th=False, interpolation="hyndman_fan", 
                                           percentiles_to_file=None,
-                                          out_unit="days"):
+                                          out_unit="days",
+                                          user_indice=None):
       
   
-      
+    
     indice_type = get_key_by_value_from_dict(maps.map_indice_type, indice_name)
          
     d = vars_dict[vars_dict.keys()[0]]['temporal_slices'] # d is any temporal slices dictionary, for ex. the first one
     t_slices = d.keys() # list of temporal slices: [(1980,'year'), (1981, 'year'), (1982, 'year'), ...]
-      
-      
-    if indice_type == "percentile_based" or indice_type == 'percentile_based_multivariable':
+    
+
+    
+    if  indice_type == 'user_indice':
+        try:
+            user_indice_perc = (user_indice['calc_operation']=='nb_events' and type(user_indice['thresh'])==str) 
+            pctl_value = int ( (user_indice['thresh'])[1:] )
+            precip = user_indice['var_type']=='p' # precipitation var
+            temp = user_indice['var_type']=='t' # temperature var
+                        
+            if user_indice_perc and precip:
+                indice_type = 'user_indice_perc_p'
+            elif user_indice_perc and temp:
+                indice_type = 'user_indice_perc_t'
+
+        except:
+            indice_type = 'user_indice_simple'
+
+        t_calend = vars_dict[vars_dict.keys()[0]]['time_calendar'] 
+        t_units = vars_dict[vars_dict.keys()[0]]['time_units']
+
+        
+    if indice_type in ['percentile_based', 'percentile_based_multivariable', 'user_indice_perc_t']:
         
         dt_arr_base = vars_dict[vars_dict.keys()[0]]['base']['dt_arr']
         years_base =  util_dt.get_year_list(dt_arr_base)
@@ -661,15 +719,15 @@ def get_indice_from_dict_temporal_slices(indice_name,
         intersecting_years = list( set(years_base).intersection(years_study) )
       
     if callback != None:    
-        global percentage_current_key
+        global percentage_current_slice
         
         #nb_vars = len(vars_dict)
         nb_t_slices = len(t_slices)
         
         if thresh == None:
-            percentage_key = (callback_percentage_total*1.0)/(nb_t_slices*nb_chunks)
+            percentage_slice = (callback_percentage_total*1.0)/(nb_t_slices*nb_chunks)
         elif thresh != None:
-            percentage_key = (callback_percentage_total*1.0)/(nb_t_slices*nb_user_thresholds*nb_chunks)
+            percentage_slice = (callback_percentage_total*1.0)/(nb_t_slices*nb_user_thresholds*nb_chunks)
 
 
       
@@ -677,7 +735,7 @@ def get_indice_from_dict_temporal_slices(indice_name,
     dt_centroid_arr = numpy.array([])
     dt_bounds_arr = numpy.array([])
       
-    key_counter = 0
+    slice_counter = 0
       
     cnt = 0
     
@@ -705,101 +763,161 @@ def get_indice_from_dict_temporal_slices(indice_name,
             sub_BIG_PD_inb = OrderedDict()
             
             
-    for key in t_slices: # key = temporal_slice_mode
-          
-        
-          
-        dt_centroid_key = d[key][0]
-        dt_bounds_key = d[key][1]
+    for slice in t_slices: # for each temporal slice
+
+        dt_centroid_ = d[slice][0]
+        dt_bounds_ = d[slice][1]
   
 
           
-        # indice computing for current key
+        # indice computing for current slice
         if indice_type == 'simple' or indice_type == 'simple_time_aggregation':   
-              
-            # one variable --> we have only one key in the dictionary
-            values_arr_key = d[key][3]                        
-            fill_val = d[key][4]
+
+            values_arr_ = d[slice][3]                        
+            fill_val = d[slice][4]
               
             if nb_user_thresholds == 0:
-                indice_key = eval(indice_name + '_calculation(values_arr_key, fill_val)')
-#                 indice_key = zzz(indice_name, arr=values_arr_key, fill_val=fill_val)
-                
+                indice_slice = eval(indice_name + '_calculation(values_arr_, fill_val)')
+
             else:
-                indice_key = eval(indice_name + '_calculation(values_arr_key, fill_val, threshold=thresh)')
+                indice_slice = eval(indice_name + '_calculation(values_arr_, fill_val, threshold=thresh)')
           
         elif indice_type == 'multivariable' or indice_type == 'multiperiod':
 
             ############ TODO: 'tasmin' and 'tasmax' to generic names
-            values_arr_tasmax_key = vars_dict['tasmax']['temporal_slices'][key][3]
-            values_arr_tasmin_key = vars_dict['tasmin']['temporal_slices'][key][3]
-
+            values_arr_tasmax = vars_dict['tasmax']['temporal_slices'][slice][3]
+            values_arr_tasmin = vars_dict['tasmin']['temporal_slices'][slice][3]
             
-            fill_val = vars_dict['tasmax']['temporal_slices'][key][4]
-            fill_val2 = vars_dict['tasmin']['temporal_slices'][key][4]
+            fill_val = vars_dict['tasmax']['temporal_slices'][slice][4]
+            fill_val2 = vars_dict['tasmin']['temporal_slices'][slice][4]
 
 
-            indice_key = eval(indice_name + '_calculation(values_arr_tasmax_key, values_arr_tasmin_key, fill_val, fill_val2)')
-#             indice_key = zzz(indice_name, arr1=values_arr_tasmax_key, arr2=values_arr_tasmin_key, fill_val1=fill_val, fill_val2=fill_val2)
-              
+            indice_slice = eval(indice_name + '_calculation(values_arr_tasmax, values_arr_tasmin, fill_val, fill_val2)')
+
+
+        elif indice_type == 'user_indice_simple':
+
+            fill_val=d[slice][4]
+            values_arr_ = d[slice][3]
+            
+            ##############################        
+
+            if user_indice['date_event']==True:
+                
+                dt_arr_= d[slice][2]
+                
+                indice_ = ui.get_user_indice(user_indice, arr=values_arr_, fill_val=fill_val)
+                indice_slice = indice_[0]
+                
+                
+                if user_indice['calc_operation'] in ['min', 'max']:                
+                    indice_slice_date_event = indice_[1]
+                    date_event_slice = calc.get_date_event_arr(dt_arr=dt_arr_, index_arr=indice_slice_date_event, 
+                                                               time_calendar=t_calend, time_units=t_units, fill_val=fill_val)
+                    
+                    
+                else:
+                    indice_slice_date_event_bounds = indice_[1] 
+                    indice_slice_date_event_start =  indice_slice_date_event_bounds[0]  
+                    indice_slice_date_event_end =  indice_slice_date_event_bounds[1] 
+                    
+                    date_event_slice_start = calc.get_date_event_arr(dt_arr=dt_arr_, index_arr=indice_slice_date_event_start, 
+                                                               time_calendar=t_calend, time_units=t_units, fill_val=fill_val)
+                    
+                    date_event_slice_end = calc.get_date_event_arr(dt_arr=dt_arr_, index_arr=indice_slice_date_event_end, 
+                                                               time_calendar=t_calend, time_units=t_units, fill_val=fill_val)
+                    
+            else:
+                indice_slice = ui.get_user_indice(user_indice, arr=values_arr_, fill_val=fill_val)
+
+            ##############################
+        
           
-        elif indice_type == 'percentile_based' or indice_type == 'percentile_based_multivariable': 
+        elif indice_type in ['percentile_based', 'percentile_based_multivariable', 'user_indice_perc_p', 'user_indice_perc_t']: 
             
-            if indice_name in ['R75p', 'R95p', 'R99p','R75pTOT','R95pTOT','R99pTOT']:
+            if indice_name in ['R75p', 'R95p', 'R99p','R75pTOT','R95pTOT','R99pTOT'] or indice_type == 'user_indice_perc_p':
+                
+                if indice_name in ['R75p', 'R95p', 'R99p','R75pTOT','R95pTOT','R99pTOT']:
+                    pctl_value = maps.map_indice_percentile_value[indice_name][0]
+                
+                
                 for v in vars_dict.keys():
-                    fill_val = vars_dict[v]['temporal_slices'][key][4]
+                    fill_val = vars_dict[v]['temporal_slices'][slice][4]
                     
-                    percentiles_arr = percentile_dict.get_percentile_arr(arr=vars_dict[v]['base']['values_arr'], 
-                                                                     percentile=maps.map_indice_percentile_value[indice_name][0], 
-                                                                     window_width=window_width,                                                                      
-                                                                     callback=None, 
-                                                                     callback_percentage_start_value=0, 
-                                                                    callback_percentage_total=100, 
-                                                                    chunk_counter=1, 
-                                                                    precipitation=True, 
-                                                                    fill_val=fill_val,                                                                     
-                                                                    interpolation=interpolation)
+                    if cnt==0: # we call get_percentile_arr(...) only one time 
+                        percentiles_arr = percentile_dict.get_percentile_arr(arr=vars_dict[v]['base']['values_arr'], 
+                                                                         percentile=pctl_value, 
+                                                                         window_width=window_width,                                                                      
+                                                                         callback=None, 
+                                                                         callback_percentage_start_value=0, 
+                                                                        callback_percentage_total=100, 
+                                                                        chunk_counter=1, 
+                                                                        precipitation=True, 
+                                                                        fill_val=fill_val,                                                                     
+                                                                        interpolation=interpolation)
+                    cnt+=1
                     
                     
-                    
-                    values_arr_key = vars_dict[v]['temporal_slices'][key][3]
+                    values_arr_ = vars_dict[v]['temporal_slices'][slice][3]
                     current_intersecting_year = -9999
                     
+                if  indice_name in ['R75p', 'R95p', 'R99p','R75pTOT','R95pTOT','R99pTOT']:   
+                    indice_slice = eval(indice_name + '_calculation(values_arr_, percentiles_arr, fill_val, out_unit=out_unit)')
+                else:
+                    if user_indice['date_event']==True:
+                        dt_arr_ = vars_dict[v]['temporal_slices'][slice][2]
+                        indice_ = ui.get_user_indice(user_indice, arr=values_arr_, fill_val=fill_val, pctl_thresh=percentiles_arr)
+                        indice_slice = indice_[0]
+                        
+                        indice_slice_date_event_bounds = indice_[1] 
+                        indice_slice_date_event_start =  indice_slice_date_event_bounds[0]  
+                        indice_slice_date_event_end =  indice_slice_date_event_bounds[1] 
+                        
+                        date_event_slice_start = calc.get_date_event_arr(dt_arr=dt_arr_, index_arr=indice_slice_date_event_start, 
+                                                                   time_calendar=t_calend, time_units=t_units, fill_val=fill_val)
+                        
+                        date_event_slice_end = calc.get_date_event_arr(dt_arr=dt_arr_, index_arr=indice_slice_date_event_end, 
+                                                                   time_calendar=t_calend, time_units=t_units, fill_val=fill_val)
+                        
+                        
+                    else:
+                        indice_slice = ui.get_user_indice(user_indice, arr=values_arr_, fill_val=fill_val, pctl_thresh=percentiles_arr)
                     
-                indice_key = eval(indice_name + '_calculation(values_arr_key, percentiles_arr, fill_val, out_unit=out_unit)')
                 
                 
             
-            else:
+            else:                
               
-                if key[1] not in intersecting_years: # key[1] --> year  
+                if slice[1] not in intersecting_years: # slice[1] --> year  
                     current_intersecting_year = -9999
                     reduced_base_years_list = [-9999]
                     cnt += 1
                 else:
-                    current_intersecting_year = key[1]
+                    current_intersecting_year = slice[1]
                     reduced_base_years_list = years_base[:]
                     reduced_base_years_list.remove(current_intersecting_year)
-    
-    
-                
+
                 indice_arr_y = numpy.zeros(( len(reduced_base_years_list), nb_rows, nb_columns))
     
                   
                 i=0
                 
-                percentage_current_key1 = percentage_current_key
+                percentage_current_slice1 = percentage_current_slice
                 
                 for ytd in reduced_base_years_list:
                     
       
                     g=0
                     for v in vars_dict.keys():
+                        
+                        if indice_type != 'user_indice_perc_t':
+                            pctl_value = maps.map_indice_percentile_value[indice_name][g]
+                        
                         vars_percentiles[v] = percentiles_calc_method
           
-                        dt_arr_key = vars_dict[v]['temporal_slices'][key][2]
-                        values_arr_key = vars_dict[v]['temporal_slices'][key][3]                        
-                        fill_val = vars_dict[v]['temporal_slices'][key][4]
+                        #dt_arr_key = vars_dict[v]['temporal_slices'][slice][2]
+                        #values_arr_key = vars_dict[v]['temporal_slices'][slice][3]                        
+                        fill_val = vars_dict[v]['temporal_slices'][slice][4]
     
                           
     
@@ -818,17 +936,14 @@ def get_indice_from_dict_temporal_slices(indice_name,
                             
                         # for not "in-base" years we compute pd ONLY one time (i.e. when cnt=1)
                         if current_intersecting_year != -9999 or cnt == 1:
-    #                     if cnt == 1:  # REMOVE  
-    #                         print "ZZZ"
 
                             pd = percentile_dict.get_percentile_dict(arr=new_arrs_base[1], 
                                                                             dt_arr=new_arrs_base[0], 
-                                                                            percentile=maps.map_indice_percentile_value[indice_name][g], 
+                                                                            percentile=pctl_value, 
                                                                             window_width=window_width, 
                                                                             only_leap_years=only_leap_years, 
                                                                             callback=None, callback_percentage_start_value=0, callback_percentage_total=100, 
                                                                             chunk_counter=1, 
-                                                                            #precipitation=maps.map_variable_precipitation[v],
                                                                             fill_val=fill_val,
                                                                             ignore_Feb29th=ignore_Feb29th,
                                                                             interpolation=interpolation)
@@ -859,103 +974,124 @@ def get_indice_from_dict_temporal_slices(indice_name,
                                     
                                     BIG_PD[v]['in_base']=sub_BIG_PD_inb
                                     BIG_PD[v]['in_base'][current_intersecting_year, ytd]=pd
-                        
-    #                     # REMOVE            
-    #                     if  current_intersecting_year != -9999:                                     
-    #                         vars_percentiles[v]['bootstrapping'] = pd        
+                                
                                     
                         g+=1
                         
           
                     vars = vars_dict.keys()
-                    p1 = vars_dict[vars[0]]['temporal_slices'][key][3]
-    
-    
-                    p3 = vars_dict[vars[0]]['temporal_slices'][key][4]
                     
+                    dt_arr_ = vars_dict[v]['temporal_slices'][slice][2]
+                    p1 = vars_dict[vars[0]]['temporal_slices'][slice][3]  
     
+                    p3 = vars_dict[vars[0]]['temporal_slices'][slice][4]
                     
-                    
+
                     if current_intersecting_year != -9999:
                         p2 = vars_percentiles[vars[0]]['bootstrapping']
                         
-                        if indice_type == 'percentile_based':
-                            indice_arr_y[i,:,:] = eval(indice_name + '_calculation(p1, dt_arr_key, p2, fill_val=p3, out_unit=out_unit)') 
+                        if indice_type == 'percentile_based':                      
+                            indice_arr_y[i,:,:] = eval(indice_name + '_calculation(p1, dt_arr_, p2, fill_val=p3, out_unit=out_unit)') 
+                        
+                        elif indice_type == 'user_indice_perc_t':
+                            indice_arr_y[i,:,:] = ui.get_user_indice(user_indice, arr=p1, fill_val=p3, dt_arr=dt_arr_, pctl_thresh=p2)
+                            
+            
                         elif indice_type == 'percentile_based_multivariable':  
-                            p4 = vars_dict[vars[1]]['temporal_slices'][key][3] 
-                            p6 = vars_dict[vars[1]]['temporal_slices'][key][4]
+                            p4 = vars_dict[vars[1]]['temporal_slices'][slice][3] 
+                            p6 = vars_dict[vars[1]]['temporal_slices'][slice][4]
                             p5 = vars_percentiles[vars[1]]['bootstrapping']
-                            indice_arr_y[i,:,:] = eval(indice_name + '_calculation(p1, p2, p4, p5, dt_arr_key, fill_val1=p3, fill_val2=p6, out_unit=out_unit)')
+                            indice_arr_y[i,:,:] = eval(indice_name + '_calculation(p1, p2, p4, p5, dt_arr_, fill_val1=p3, fill_val2=p6, out_unit=out_unit)')
                         
                         
                         if callback != None:
-                            percentage_current_key_intersect_year = percentage_current_key1 + percentage_key/((len(intersecting_years)-1)*1.0)
-                            callback(percentage_current_key_intersect_year)
-                            percentage_current_key1 = percentage_current_key_intersect_year
+                            percentage_current_slice_intersect_year = percentage_current_slice1 + percentage_slice/((len(intersecting_years)-1)*1.0)
+                            callback(percentage_current_slice_intersect_year)
+                            percentage_current_slice1 = percentage_current_slice_intersect_year
+                    
+                    
                     else:
                         p2_ = vars_percentiles[vars[0]]['without_bootstrapping']
                         
                         if indice_type == 'percentile_based':
-                            indice_arr_y[i,:,:] = eval(indice_name + '_calculation(p1, dt_arr_key, p2_, fill_val=p3, out_unit=out_unit)') 
+                            indice_arr_y[i,:,:] = eval(indice_name + '_calculation(p1, dt_arr_, p2_, fill_val=p3, out_unit=out_unit)') 
+                            
+                        elif indice_type == 'user_indice_perc_t':
+                            if user_indice['date_event']==True:
+                                print "X3..." ################## ????????????????????
+                            
+                            else:
+                                indice_arr_y[i,:,:] = ui.get_user_indice(user_indice, arr=p1, fill_val=p3, dt_arr=dt_arr_, pctl_thresh=p2_)
+                            
                         elif indice_type == 'percentile_based_multivariable':  
-                            p4 = vars_dict[vars[1]]['temporal_slices'][key][3] 
-                            p6 = vars_dict[vars[1]]['temporal_slices'][key][4]
+                            p4 = vars_dict[vars[1]]['temporal_slices'][slice][3] 
+                            p6 = vars_dict[vars[1]]['temporal_slices'][slice][4]
                             p5_ = vars_percentiles[vars[1]]['without_bootstrapping']
                             indice_arr_y[i,:,:] = eval(indice_name + '_calculation(p1, p2_, p4, p5_, dt_arr_key, fill_val1=p3, fill_val2=p6, out_unit=out_unit)')
     
-                    
-                          
+
                     i+=1
-                  
+                
                 if  current_intersecting_year == -9999:  
-                    indice_key = indice_arr_y
-                    indice_key = indice_key.reshape(indice_key.shape[1], indice_key.shape[2]) # 3D --> 2D
+                    indice_slice = indice_arr_y                    
+                    indice_slice = indice_slice.reshape(indice_slice.shape[1], indice_slice.shape[2]) # 3D --> 2D
                     
                 else: 
-                    #print  indice_arr_y[:,0,0]
-                    indice_key = numpy.mean(indice_arr_y, axis=0)
-                    #print '===='
-    
+                    indice_slice = numpy.mean(indice_arr_y, axis=0)
+                    
 
-    
-#                 
-#         elif indice_type == 'percentile_based_multivariable':
-#             dt_arr_key = dict_temporal_slices[key][2]
-#             indice_key = eval(indice_name + '_calculation(values_arr_key, percentile_dict, values_arr_key2, percentile_dict2, dt_arr_key, fill_val, fill_val2)')
-#         
-        #############
-          
-          
-        indice_key = indice_key.reshape(-1, indice_key.shape[0], indice_key.shape[1]) # 2D --> 3D
-          
+        indice_slice = indice_slice.reshape(-1, indice_slice.shape[0], indice_slice.shape[1]) # 2D --> 3D
         
+        if indice_type in ['user_indice_simple', 'user_indice_perc_p', 'user_indice_perc_t'] and user_indice['date_event']==True:
+            if user_indice['calc_operation'] in ['min', 'max']: 
+                date_event_slice = date_event_slice.reshape(-1, date_event_slice.shape[0], date_event_slice.shape[1]) # 2D --> 3D
+            else:
+                date_event_slice_start = date_event_slice_start.reshape(-1, date_event_slice_start.shape[0], date_event_slice_start.shape[1]) # 2D --> 3D
+                date_event_slice_end = date_event_slice_end.reshape(-1, date_event_slice_end.shape[0], date_event_slice_end.shape[1]) # 2D --> 3D
+            
+
           
-        if indice_type == 'simple_time_aggregation':
-            if key_counter == 0:
-                indice_arr = indice_key
-            else:
-                indice_arr += indice_key
-        else:
-            if key_counter == 0:
-                indice_arr = indice_key
-            else:
-                indice_arr = numpy.concatenate((indice_arr, indice_key), axis=0)
+#         if indice_type == 'simple_time_aggregation':
+#             if slice_counter == 0:
+#                 indice_arr = indice_slice
+#             else:
+#                 indice_arr += indice_slice
+#         else:
+        if slice_counter == 0:
+            indice_arr = indice_slice
+        else:                
+            indice_arr = numpy.concatenate((indice_arr, indice_slice), axis=0)
+            
+        if indice_type in ['user_indice_simple', 'user_indice_perc_p', 'user_indice_perc_t'] and user_indice['date_event']==True:
+            if slice_counter == 0:
+                if user_indice['calc_operation'] in ['min', 'max']: 
+                    date_event_arr = date_event_slice
+                else:
+                    date_event_start_arr = date_event_slice_start
+                    date_event_end_arr = date_event_slice_end
+            else:  
+                if user_indice['calc_operation'] in ['min', 'max']:       
+                    date_event_arr = numpy.concatenate((date_event_arr, date_event_slice), axis=0)   
+                else:
+                    date_event_start_arr = numpy.concatenate((date_event_start_arr, date_event_slice_start), axis=0)
+                    date_event_end_arr = numpy.concatenate((date_event_end_arr, date_event_slice_end), axis=0)
+        
          
-        dt_centroid_arr = numpy.append(dt_centroid_arr, dt_centroid_key) # 1D
-        dt_bounds_arr = numpy.concatenate((dt_bounds_arr, dt_bounds_key)) # 1D
+        dt_centroid_arr = numpy.append(dt_centroid_arr, dt_centroid_) # 1D
+        dt_bounds_arr = numpy.concatenate((dt_bounds_arr, dt_bounds_)) # 1D
           
   
           
         if callback != None:
-            percentage_current_key = percentage_current_key + percentage_key
+            percentage_current_slice = percentage_current_slice + percentage_slice
             if indice_type == 'percentile_based' or indice_type == 'percentile_based_multivariable':
                 if  current_intersecting_year == -9999:
-                    callback(percentage_current_key)
+                    callback(percentage_current_slice)
             
             else:
-                callback(percentage_current_key)
+                callback(percentage_current_slice)
               
-        key_counter += 1
+        slice_counter += 1
     
     
     if percentiles_to_file != None and opt=='b':
@@ -963,14 +1099,19 @@ def get_indice_from_dict_temporal_slices(indice_name,
         with open(file_path, 'wb') as handle:
             pickle.dump(BIG_PD, handle)
             print "The dictionary with daily percentiles is saved in the file: " + os.path.abspath(file_path)
+
     
-    
-    
-    if indice_type == 'simple_time_aggregation' :
-        indice_arr = indice_arr / key_counter
-        dt_centroid_arr = numpy.asarray([dt_centroid_arr[key_counter/2]])
-        dt_bounds_arr = numpy.asarray([dt_bounds_arr[0],dt_bounds_arr[key_counter*2-1]])
+#     if indice_type == 'simple_time_aggregation' :
+#         indice_arr = indice_arr / slice_counter
+#         dt_centroid_arr = numpy.asarray([dt_centroid_arr[slice_counter/2]])
+#         dt_bounds_arr = numpy.asarray([dt_bounds_arr[0],dt_bounds_arr[slice_counter*2-1]])
   
     dt_bounds_arr = dt_bounds_arr.reshape(-1,2) # 1D --> 2D   
-  
-    return (dt_centroid_arr, dt_bounds_arr, indice_arr)
+    
+    if indice_type in ['user_indice_simple', 'user_indice_perc_p', 'user_indice_perc_t'] and user_indice['date_event']==True:
+        if user_indice['calc_operation'] in ['min', 'max']: 
+            return (dt_centroid_arr, dt_bounds_arr, indice_arr, date_event_arr)
+        else:
+            return (dt_centroid_arr, dt_bounds_arr, indice_arr, date_event_start_arr, date_event_end_arr)
+    else:    
+        return (dt_centroid_arr, dt_bounds_arr, indice_arr)

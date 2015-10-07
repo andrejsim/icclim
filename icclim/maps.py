@@ -14,7 +14,8 @@ map_indice_type =   {
                         'percentile_based': ['TG10p', 'TX10p', 'TN10p', 'TG90p', 'TX90p', 'TN90p', 'WSDI', 'CSDI',
                                              'R75p', 'R75pTOT', 'R95p', 'R95pTOT', 'R99p', 'R99pTOT'],
                             
-                        'percentile_based_multivariable': ['CD', 'CW', 'WD', 'WW']
+                        'percentile_based_multivariable': ['CD', 'CW', 'WD', 'WW'],
+
                     }
 
 map_indice_percentile_value =   {
@@ -48,11 +49,21 @@ map_variable_precipitation =    {
                                     'pr': True
                                 }
 
-# ETCCDI Climate Change Indices
-# http://etccdi.pacificclimate.org/list_27_indices.shtml
-map_indices_ETCCDI = {  'FD':  {'threshold': 0},       
-                        'SU':  {'threshold': 25},       
-                        'ID':  {'threshold': 0},       
-                        'TR':  {'threshold': 20},  
+# # ETCCDI Climate Change Indices
+# # http://etccdi.pacificclimate.org/list_27_indices.shtml
+# map_indices_ETCCDI = {  'FD':  {'threshold': 0},       
+#                         'SU':  {'threshold': 25},       
+#                         'ID':  {'threshold': 0},       
+#                         'TR':  {'threshold': 20},  
+#                       }
 
-                      }
+map_calc_indice_params = {
+                          'arr': None,
+                          'fill_val': None,
+                          'arr2': None,
+                          'fill_val2': None,
+                          'dt_arr': None,
+                          'percentile_dict': None,
+                          'out_unit': None,
+                          'percentile_arr': None
+                          }

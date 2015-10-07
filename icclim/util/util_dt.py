@@ -306,7 +306,7 @@ def get_indices_subset(dt_arr, time_range):
 
     dt1 = time_range[0]
     dt2 = time_range[1]
-   
+    
     
     if dt1 >= dt_arr[0] and dt2 <= dt_arr[-1]:
 

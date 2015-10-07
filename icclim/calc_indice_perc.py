@@ -6,14 +6,16 @@
 
 import numpy
 
-import ctypes
-from numpy.ctypeslib import ndpointer
-import os
-import calc_indice
+# import ctypes
+# from numpy.ctypeslib import ndpointer
+# import os
+# import calc_indice
+# 
+# my_rep = os.path.dirname(os.path.abspath(__file__)) + os.sep
+# 
+# libraryC = ctypes.cdll.LoadLibrary(my_rep+'libC.so')
 
-my_rep = os.path.dirname(os.path.abspath(__file__)) + os.sep
-
-libraryC = ctypes.cdll.LoadLibrary(my_rep+'libC.so')
+import util.calc as calc
 
 
 '''
@@ -38,158 +40,179 @@ Elementary functions computing percentile based indices:
 - WW
 '''
 
-############# utility functions: begin #############
-def get_binary_arr(arr1, arr2, logical_operation):
-    '''
-    Compare "arr1" with "arr2" and return a binary array with the result.
-    
-    :param arr1: array to comparer with arr2
-    :type arr1: numpy.ndarray
-    :param arr2: reference array 
-    :type arr2: numpy.ndarray
-    :rtype: binary numpy.ndarray
-    
-    ..warning:: "arr1" and "arr2" must have the same shape
-    
-    '''
-
-    if logical_operation == 'gt':
-        binary_arr = arr1 > arr2
-        
-    elif logical_operation == 'get':
-            binary_arr = arr1 >= arr2
-            
-    elif logical_operation == 'lt':
-            binary_arr = arr1 < arr2
-            
-    elif logical_operation == 'let':
-            binary_arr = arr1 <= arr2 
-    
-    
-    binary_arr = binary_arr.astype(int) # True/False ---> 1/0
-
-    # if binary_arr is masked array, we fill masked values with 0
-    if isinstance(binary_arr, numpy.ma.MaskedArray):
-        binary_arr = binary_arr.filled(0.0)
-
-    
-    return binary_arr
-
-
-def get_masked_arr(arr, fill_val):
-    '''
-    If a masked array is passed, this function does nothing.
-    If a filled array is passed (fill_value must be passed also), it will be transformed into a masked array.
-    
-    '''
-    if isinstance(arr, numpy.ma.MaskedArray):               # numpy.ma.MaskedArray
-        masked_arr = arr
-    else:                                                   # numpy.ndarray
-        if (fill_val==None):
-            raise(ValueError('If input array is not a masked array, a "fill_value" must be provided.'))
-        mask_arr = (arr==fill_val)
-        masked_arr = numpy.ma.masked_array(arr, mask=mask_arr, fill_value=fill_val)
-    
-    return masked_arr
-
-##### utility function: end #####################
-
-def TXXXp(arr, dt_arr, percentile_dict, logical_operation, fill_val=None, out_unit="days"):
-    
-    TXXXp = numpy.zeros((arr.shape[1], arr.shape[2]))
-    
-    arr_masked = get_masked_arr(arr, fill_val)
-    
-    i=0
-    for dt in dt_arr:
-        
-        # current calendar day
-        m = dt.month
-        d = dt.day
-
-        # we take the 2D array corresponding to the current calendar day
-        current_perc_arr = percentile_dict[m,d]
-                    
-        # we are looking for the values which are g/ge/l/le than the XXth percentile  
-        bin_arr = get_binary_arr(arr_masked[i,:,:], current_perc_arr, logical_operation=logical_operation) 
-        TXXXp = TXXXp + bin_arr
-        
-        i+=1
-   
-    if out_unit == "days":
-        TXXXp = TXXXp
-    elif out_unit == "%":
-        print len(dt_arr)
-        TXXXp = TXXXp*(100./len(dt_arr))
-    
-    # RESULT must be numpy.ma.MaskedArray if arr is numpy.ma.MaskedArray
-    if isinstance(arr, numpy.ma.MaskedArray):
-        TXXXp = numpy.ma.array(TXXXp, mask=TXXXp==arr_masked.fill_value, fill_value=arr_masked.fill_value)
-        
-    return TXXXp  
-
-def WCSDI(arr, dt_arr, percentile_dict, logical_operation, fill_val=None, N=6):
-    '''
-    Calculate the WSDI/CSDI indice (warm/cold-spell duration index).
-    This function calls C function "WSDI_CSDI_3d" from libC.c
- 
-    '''
-
- 
-    arr_masked = get_masked_arr(arr, fill_val)
-    
-    # step1: we get a 3D binary array from arr (if arr value > corresponding 90th percentile value: 1, else: 0)    
-    bin_arr = numpy.zeros((arr.shape[0], arr.shape[1], arr.shape[2]))
-    
-    i=0
-    for dt in dt_arr:
-        
-        # current calendar day
-        m = dt.month
-        d = dt.day
-
-        current_perc_arr = percentile_dict[m,d]
-        
-        # we are looking for the values which are greater than the 90th percentile  
-        bin_arr_current_slice = get_binary_arr(arr_masked[i,:,:], current_perc_arr, logical_operation=logical_operation) 
-#         bin_arr_current_slice = bin_arr_current_slice.filled(fill_value=0) # we fill the bin_arr_current_slice with zeros
-        bin_arr[i,:,:] = bin_arr_current_slice
-
-        i+=1
-    
-    # step2: now we will pass our 3D binary array (bin_arr) to C function WSDI_CSDI_3d
-    
-    # array data type should be 'float32' to pass it to C function  
-    if bin_arr.dtype != 'float32':
-        bin_arr = numpy.array(bin_arr, dtype='float32')
-    
-    
-    WSDI_CSDI_C = libraryC.WSDI_CSDI_3d    
-    WSDI_CSDI_C.restype = None
-    WSDI_CSDI_C.argtypes = [ndpointer(ctypes.c_float),
-                            ctypes.c_int,
-                            ctypes.c_int,
-                            ctypes.c_int,
-                            ndpointer(ctypes.c_double),
-                            ctypes.c_int] 
-        
-    WCSDI = numpy.zeros([arr.shape[1], arr.shape[2]]) # reserve memory
-        
-    WSDI_CSDI_C(bin_arr, bin_arr.shape[0], bin_arr.shape[1], bin_arr.shape[2], WCSDI, N)
-    
-    WCSDI = WCSDI.reshape(arr.shape[1], arr.shape[2])
-    
-    # RESULT must be numpy.ma.MaskedArray if arr is numpy.ma.MaskedArray
-    if isinstance(arr, numpy.ma.MaskedArray):
-        WCSDI = numpy.ma.array(WCSDI, mask=WCSDI==arr_masked.fill_value, fill_value=arr_masked.fill_value)
-
-    return WCSDI    
-
-
-# def get_wet_days(arr, pr_thresh = 1.0, logical_operation='gt', fill_val=None):
+# ############# utility functions: begin #############
+# def get_binary_arr(arr1, arr2, logical_operation):
 #     '''
-#     Return binary 3D array with the same same as arr, where 1 is a wet day.
+#     Compare "arr1" with "arr2" and return a binary array with the result.
+#     
+#     :param arr1: array to comparer with arr2
+#     :type arr1: numpy.ndarray
+#     :param arr2: reference array 
+#     :type arr2: numpy.ndarray
+#     :rtype: binary numpy.ndarray
+#     
+#     ..warning:: "arr1" and "arr2" must have the same shape
+#     
 #     '''
+# 
+#     if logical_operation == 'gt':
+#         binary_arr = arr1 > arr2
+#         
+#     elif logical_operation == 'get':
+#             binary_arr = arr1 >= arr2
+#             
+#     elif logical_operation == 'lt':
+#             binary_arr = arr1 < arr2
+#             
+#     elif logical_operation == 'let':
+#             binary_arr = arr1 <= arr2 
+#     
+#     
+#     binary_arr = binary_arr.astype(int) # True/False ---> 1/0
+# 
+#     # if binary_arr is masked array, we fill masked values with 0
+#     if isinstance(binary_arr, numpy.ma.MaskedArray):
+#         binary_arr = binary_arr.filled(0.0)
+# 
+#     
+#     return binary_arr
+# 
+# 
+# def get_masked_arr(arr, fill_val):
+#     '''
+#     If a masked array is passed, this function does nothing.
+#     If a filled array is passed (fill_value must be passed also), it will be transformed into a masked array.
+#     
+#     '''
+#     if isinstance(arr, numpy.ma.MaskedArray):               # numpy.ma.MaskedArray
+#         masked_arr = arr
+#     else:                                                   # numpy.ndarray
+#         if (fill_val==None):
+#             raise(ValueError('If input array is not a masked array, a "fill_value" must be provided.'))
+#         mask_arr = (arr==fill_val)
+#         masked_arr = numpy.ma.masked_array(arr, mask=mask_arr, fill_value=fill_val)
+#     
+#     return masked_arr
+# 
+# ##### utility function: end #####################
+
+# def TXXXp(arr, dt_arr, percentile_dict, logical_operation, fill_val=None, out_unit="days"):
+#     
+#     TXXXp = numpy.zeros((arr.shape[1], arr.shape[2]))
+#     
+#     arr_masked = calc.get_masked_arr(arr, fill_val)
+#     
+#     i=0
+#     for dt in dt_arr:
+#         
+#         # current calendar day
+#         m = dt.month
+#         d = dt.day
+# 
+#         # we take the 2D array corresponding to the current calendar day
+#         current_perc_arr = percentile_dict[m,d]
+#                     
+#         # we are looking for the values which are g/ge/l/le than the XXth percentile  
+#         bin_arr = calc.get_binary_arr(arr_masked[i,:,:], current_perc_arr, logical_operation=logical_operation) 
+#         TXXXp = TXXXp + bin_arr
+#         
+#         i+=1
+#    
+#     if out_unit == "days":
+#         TXXXp = TXXXp
+#     elif out_unit == "%":
+#         print len(dt_arr)
+#         TXXXp = TXXXp*(100./len(dt_arr))
+#     
+#     # RESULT must be numpy.ma.MaskedArray if arr is numpy.ma.MaskedArray
+#     if isinstance(arr, numpy.ma.MaskedArray):
+#         TXXXp = numpy.ma.array(TXXXp, mask=TXXXp==arr_masked.fill_value, fill_value=arr_masked.fill_value)
+#         
+#     return TXXXp  
+# 
+# def WCSDI(arr, dt_arr, percentile_dict, logical_operation, fill_val=None, N=6):
+#     '''
+#     Calculate the WSDI/CSDI indice (warm/cold-spell duration index).
+#     This function calls C function "WSDI_CSDI_3d" from libC.c
+#  
+#     '''
+# 
+#  
+#     arr_masked = calc.get_masked_arr(arr, fill_val)
+#     
+#     # step1: we get a 3D binary array from arr (if arr value > corresponding 90th percentile value: 1, else: 0)    
+#     bin_arr = numpy.zeros((arr.shape[0], arr.shape[1], arr.shape[2]))
+#     
+#     i=0
+#     for dt in dt_arr:
+#         
+#         # current calendar day
+#         m = dt.month
+#         d = dt.day
+# 
+#         current_perc_arr = percentile_dict[m,d]
+#         
+#         # we are looking for the values which are greater than the 90th percentile  
+#         bin_arr_current_slice = calc.get_binary_arr(arr_masked[i,:,:], current_perc_arr, logical_operation=logical_operation) 
+# #         bin_arr_current_slice = bin_arr_current_slice.filled(fill_value=0) # we fill the bin_arr_current_slice with zeros
+#         bin_arr[i,:,:] = bin_arr_current_slice
+# 
+#         i+=1
+#     
+#     # step2: now we will pass our 3D binary array (bin_arr) to C function WSDI_CSDI_3d
+#     
+#     # array data type should be 'float32' to pass it to C function  
+#     if bin_arr.dtype != 'float32':
+#         bin_arr = numpy.array(bin_arr, dtype='float32')
+#     
+#     
+#     WSDI_CSDI_C = libraryC.WSDI_CSDI_3d    
+#     WSDI_CSDI_C.restype = None
+#     WSDI_CSDI_C.argtypes = [ndpointer(ctypes.c_float),
+#                             ctypes.c_int,
+#                             ctypes.c_int,
+#                             ctypes.c_int,
+#                             ndpointer(ctypes.c_double),
+#                             ctypes.c_int] 
+#         
+#     WCSDI = numpy.zeros([arr.shape[1], arr.shape[2]]) # reserve memory
+#         
+#     WSDI_CSDI_C(bin_arr, bin_arr.shape[0], bin_arr.shape[1], bin_arr.shape[2], WCSDI, N)
+#     
+#     WCSDI = WCSDI.reshape(arr.shape[1], arr.shape[2])
+#     
+#     # RESULT must be numpy.ma.MaskedArray if arr is numpy.ma.MaskedArray
+#     if isinstance(arr, numpy.ma.MaskedArray):
+#         WCSDI = numpy.ma.array(WCSDI, mask=WCSDI==arr_masked.fill_value, fill_value=arr_masked.fill_value)
+# 
+#     return WCSDI    
+# 
+# 
+# # def get_wet_days(arr, pr_thresh = 1.0, logical_operation='gt', fill_val=None):
+# #     '''
+# #     Return binary 3D array with the same same as arr, where 1 is a wet day.
+# #     '''
+# #     arr_masked = get_masked_arr(arr, fill_val)  # mm/s
+# #     arr_masked = arr_masked*60*60*24            # mm/day
+# #     
+# #     # we need to check only wet days (i.e. days with RR >= 1 mm)
+# #     # so, we mask all values < 1 mm with the same fill_value
+# #     mask_arr_masked = arr_masked < pr_thresh # mask
+# #     arr_masked_masked = numpy.ma.array(arr_masked, mask=mask_arr_masked, fill_value=arr_masked.fill_value)
+# #   
+# #     # we are looking for the values which are greater than the Xth percentile  
+# #     bin_arr = get_binary_arr(arr_masked_masked[:,:,:], percentile_arr, logical_operation=logical_operation)
+#     
+#     
+#     
+# 
+# def RXXp(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=None, out_unit="days"):
+#     '''
+#     Calculate a RXXp indice, where XX is a percentile value.
+# 
+#     '''
+#     #RXXp = numpy.zeros((arr.shape[1], arr.shape[2]))
+# 
 #     arr_masked = get_masked_arr(arr, fill_val)  # mm/s
 #     arr_masked = arr_masked*60*60*24            # mm/day
 #     
@@ -199,135 +222,114 @@ def WCSDI(arr, dt_arr, percentile_dict, logical_operation, fill_val=None, N=6):
 #     arr_masked_masked = numpy.ma.array(arr_masked, mask=mask_arr_masked, fill_value=arr_masked.fill_value)
 #   
 #     # we are looking for the values which are greater than the Xth percentile  
-#     bin_arr = get_binary_arr(arr_masked_masked[:,:,:], percentile_arr, logical_operation=logical_operation)
-    
-    
-    
-
-def RXXp(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=None, out_unit="days"):
-    '''
-    Calculate a RXXp indice, where XX is a percentile value.
-
-    '''
-    #RXXp = numpy.zeros((arr.shape[1], arr.shape[2]))
-
-    arr_masked = get_masked_arr(arr, fill_val)  # mm/s
-    arr_masked = arr_masked*60*60*24            # mm/day
-    
-    # we need to check only wet days (i.e. days with RR >= 1 mm)
-    # so, we mask all values < 1 mm with the same fill_value
-    mask_arr_masked = arr_masked < pr_thresh # mask
-    arr_masked_masked = numpy.ma.array(arr_masked, mask=mask_arr_masked, fill_value=arr_masked.fill_value)
-  
-    # we are looking for the values which are greater than the Xth percentile  
-    bin_arr = get_binary_arr(arr_masked_masked, percentile_arr, logical_operation=logical_operation) 
-    RXXp = numpy.sum(bin_arr, axis=0)
-     
-    if out_unit == "days":
-        RXXp = RXXp
-    elif out_unit == "%":
-        RXXp = RXXp*(100./arr.shape[0])
-    
-    # RESULT must be numpy.ma.MaskedArray if arr is numpy.ma.MaskedArray
-    if isinstance(arr, numpy.ma.MaskedArray):
-        RXXp = numpy.ma.array(RXXp, mask=RXXp==arr_masked.fill_value, fill_value=arr_masked.fill_value)
-     
-    return RXXp    
-
-
-def RXXpTOT(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=None):
-    '''
-    Calculate a RXXpTOT indice, where XX is a percentile value.
-    '''
-    
-    #RXXpTOT = numpy.zeros((arr.shape[1], arr.shape[2]))
-
-    arr_masked = get_masked_arr(arr, fill_val)  # mm/s
-    arr_masked = arr_masked*60*60*24            # mm/day
-    
-    # we need to check only wet days (i.e. days with RR >= 1 mm)
-    # so, we mask all values < 1 mm with the same fill_value
-    mask_arr_masked = arr_masked < pr_thresh # mask
-    arr_masked_masked = numpy.ma.array(arr_masked, mask=mask_arr_masked, fill_value=arr_masked.fill_value)
-  
-    # we are looking for the values which are greater than the Xth percentile  
-    bin_arr = get_binary_arr(arr_masked_masked, percentile_arr, logical_operation=logical_operation)
-    
-    # we inverse bin_arr to get a mask (i.e. to mask values which are less or equal than the Xth percentile)
-    maska = numpy.logical_not(bin_arr)
-    
-    # we apply the mask to arr_masked_masked
-    arr_m = numpy.ma.array(arr_masked_masked, mask=maska, fill_value=arr_masked.fill_value)
-    
-    RXXpTOT = numpy.sum(arr_m, axis=0)
-
-    if isinstance(arr, numpy.ma.MaskedArray):
-        RXXpTOT = numpy.ma.array(RXXpTOT, mask=RXXpTOT==arr_masked.fill_value, fill_value=arr_masked.fill_value)
-        
-    
-    return RXXpTOT
-
-
-def CD_CW_WD_WW(t_arr, t_percentile_dict, t_logical_operation, p_arr, p_percentile_dict, p_logical_operation, dt_arr, 
-                pr_thresh = 1.0, fill_val1=None, fill_val2=None, out_unit="days"):
-    '''
-    Calculates the CD/CW/WD/WW indices.    
-    '''
-    # we intitialize the indice array
-    RESULT = numpy.zeros((t_arr.shape[1], t_arr.shape[2]))
-        
-    
-    # 1) we mask both arrays: t_arr and p_arr
-    t_arr_masked = get_masked_arr(t_arr, fill_val1)
-    p_arr_masked = get_masked_arr(p_arr, fill_val2)
-
-    # 2) p_arr: mm/s ---> mm/day ; we are looking only for wet days (RR > 1 mm), i.e. we mask values < 1 mm
-    p_arr_masked = p_arr_masked*60*60*24            # mm/day
-    mask_p_arr = p_arr_masked<pr_thresh
-    p_arr_masked_masked = numpy.ma.array(p_arr_masked, mask=mask_p_arr) 
-
-    
-    i=0
-    for dt in dt_arr:
-        
-        # current calendar day
-        m = dt.month
-        d = dt.day
-        
-
-        t_current_perc_arr = t_percentile_dict[m,d]
-        p_current_perc_arr = p_percentile_dict[m,d]
-
-        # 3) we compare daily mean temperature (t_arr) with its XXth percentile (t_percentile_dict)                   ==> result 1          
-        t_bin_arr = get_binary_arr(t_arr_masked[i,:,:], t_current_perc_arr, logical_operation=t_logical_operation) 
-        
-        # 4) we compare daily precipitation amount at wet day (p_arr) with its XXth percentile (p_percentile_dict)    ==> result 2        
-        p_bin_arr = get_binary_arr(p_arr_masked_masked[i,:,:], p_current_perc_arr, logical_operation=p_logical_operation) 
-    
-        # 5) result 1 AND result 2 ==> RESULT        
-        t_bin_arr_AND_p_bin_arr = numpy.logical_and(t_bin_arr, p_bin_arr) # masked array              
-        #t_bin_arr_AND_p_bin_arr_filled = t_bin_arr_AND_p_bin_arr.filled(fill_value=0)
-        
-#         RESULT = RESULT + t_bin_arr_AND_p_bin_arr_filled
-        RESULT = RESULT + t_bin_arr_AND_p_bin_arr
-        
-        i+=1
-    
-    
-    if out_unit == "days":
-        RESULT = RESULT
-    elif out_unit == "%":
-        RESULT = RESULT*(100./len(dt_arr))
-    
-    # RESULT must be numpy.ma.MaskedArray if arr is numpy.ma.MaskedArray
-    if isinstance(t_arr, numpy.ma.MaskedArray):
-        RESULT = numpy.ma.array(RESULT, mask=RESULT==t_arr_masked.fill_value, fill_value=t_arr_masked.fill_value)
-    
-    
-    return RESULT
-
-
-##########################################
+#     bin_arr = get_binary_arr(arr_masked_masked, percentile_arr, logical_operation=logical_operation) 
+#     RXXp = numpy.sum(bin_arr, axis=0)
+#      
+#     if out_unit == "days":
+#         RXXp = RXXp
+#     elif out_unit == "%":
+#         RXXp = RXXp*(100./arr.shape[0])
+#     
+#     # RESULT must be numpy.ma.MaskedArray if arr is numpy.ma.MaskedArray
+#     if isinstance(arr, numpy.ma.MaskedArray):
+#         RXXp = numpy.ma.array(RXXp, mask=RXXp==arr_masked.fill_value, fill_value=arr_masked.fill_value)
+#      
+#     return RXXp    
+# 
+# 
+# def RXXpTOT(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=None):
+#     '''
+#     Calculate a RXXpTOT indice, where XX is a percentile value.
+#     '''
+#     
+#     #RXXpTOT = numpy.zeros((arr.shape[1], arr.shape[2]))
+# 
+#     arr_masked = get_masked_arr(arr, fill_val)  # mm/s
+#     arr_masked = arr_masked*60*60*24            # mm/day
+#     
+#     # we need to check only wet days (i.e. days with RR >= 1 mm)
+#     # so, we mask all values < 1 mm with the same fill_value
+#     mask_arr_masked = arr_masked < pr_thresh # mask
+#     arr_masked_masked = numpy.ma.array(arr_masked, mask=mask_arr_masked, fill_value=arr_masked.fill_value)
+#   
+#     # we are looking for the values which are greater than the Xth percentile  
+#     bin_arr = get_binary_arr(arr_masked_masked, percentile_arr, logical_operation=logical_operation)
+#     
+#     # we inverse bin_arr to get a mask (i.e. to mask values which are less or equal than the Xth percentile)
+#     maska = numpy.logical_not(bin_arr)
+#     
+#     # we apply the mask to arr_masked_masked
+#     arr_m = numpy.ma.array(arr_masked_masked, mask=maska, fill_value=arr_masked.fill_value)
+#     
+#     RXXpTOT = numpy.sum(arr_m, axis=0)
+# 
+#     if isinstance(arr, numpy.ma.MaskedArray):
+#         RXXpTOT = numpy.ma.array(RXXpTOT, mask=RXXpTOT==arr_masked.fill_value, fill_value=arr_masked.fill_value)
+#         
+#     
+#     return RXXpTOT
+# 
+# 
+# def CD_CW_WD_WW(t_arr, t_percentile_dict, t_logical_operation, p_arr, p_percentile_dict, p_logical_operation, dt_arr, 
+#                 pr_thresh = 1.0, fill_val1=None, fill_val2=None, out_unit="days"):
+#     '''
+#     Calculates the CD/CW/WD/WW indices.    
+#     '''
+#     # we intitialize the indice array
+#     RESULT = numpy.zeros((t_arr.shape[1], t_arr.shape[2]))
+#         
+#     
+#     # 1) we mask both arrays: t_arr and p_arr
+#     t_arr_masked = get_masked_arr(t_arr, fill_val1)
+#     p_arr_masked = get_masked_arr(p_arr, fill_val2)
+# 
+#     # 2) p_arr: mm/s ---> mm/day ; we are looking only for wet days (RR > 1 mm), i.e. we mask values < 1 mm
+#     p_arr_masked = p_arr_masked*60*60*24            # mm/day
+#     mask_p_arr = p_arr_masked<pr_thresh
+#     p_arr_masked_masked = numpy.ma.array(p_arr_masked, mask=mask_p_arr) 
+# 
+#     
+#     i=0
+#     for dt in dt_arr:
+#         
+#         # current calendar day
+#         m = dt.month
+#         d = dt.day
+#         
+# 
+#         t_current_perc_arr = t_percentile_dict[m,d]
+#         p_current_perc_arr = p_percentile_dict[m,d]
+# 
+#         # 3) we compare daily mean temperature (t_arr) with its XXth percentile (t_percentile_dict)                   ==> result 1          
+#         t_bin_arr = get_binary_arr(t_arr_masked[i,:,:], t_current_perc_arr, logical_operation=t_logical_operation) 
+#         
+#         # 4) we compare daily precipitation amount at wet day (p_arr) with its XXth percentile (p_percentile_dict)    ==> result 2        
+#         p_bin_arr = get_binary_arr(p_arr_masked_masked[i,:,:], p_current_perc_arr, logical_operation=p_logical_operation) 
+#     
+#         # 5) result 1 AND result 2 ==> RESULT        
+#         t_bin_arr_AND_p_bin_arr = numpy.logical_and(t_bin_arr, p_bin_arr) # masked array              
+#         #t_bin_arr_AND_p_bin_arr_filled = t_bin_arr_AND_p_bin_arr.filled(fill_value=0)
+#         
+# #         RESULT = RESULT + t_bin_arr_AND_p_bin_arr_filled
+#         RESULT = RESULT + t_bin_arr_AND_p_bin_arr
+#         
+#         i+=1
+#     
+#     
+#     if out_unit == "days":
+#         RESULT = RESULT
+#     elif out_unit == "%":
+#         RESULT = RESULT*(100./len(dt_arr))
+#     
+#     # RESULT must be numpy.ma.MaskedArray if arr is numpy.ma.MaskedArray
+#     if isinstance(t_arr, numpy.ma.MaskedArray):
+#         RESULT = numpy.ma.array(RESULT, mask=RESULT==t_arr_masked.fill_value, fill_value=t_arr_masked.fill_value)
+#     
+#     
+#     return RESULT
+# 
+# 
+# ##########################################
 
 
 def TG90p_calculation(arr, dt_arr, percentile_dict, fill_val=None, out_unit="days"):
@@ -352,7 +354,7 @@ def TG90p_calculation(arr, dt_arr, percentile_dict, fill_val=None, out_unit="day
 
     '''
 
-    TG90p = TXXXp(arr, dt_arr, percentile_dict, logical_operation='gt', fill_val=fill_val, out_unit=out_unit)    
+    TG90p = calc.TXXXp(arr, dt_arr, percentile_dict, logical_operation='gt', fill_val=fill_val, out_unit=out_unit)    
     
     return TG90p
 
@@ -379,7 +381,7 @@ def TX90p_calculation(arr, dt_arr, percentile_dict, fill_val=None, out_unit="day
 
     '''
 
-    TX90p = TXXXp(arr, dt_arr, percentile_dict, logical_operation='gt', fill_val=fill_val, out_unit=out_unit) 
+    TX90p = calc.TXXXp(arr, dt_arr, percentile_dict, logical_operation='gt', fill_val=fill_val, out_unit=out_unit) 
     
     return TX90p
     
@@ -406,7 +408,7 @@ def TN90p_calculation(arr, dt_arr, percentile_dict, fill_val=None, out_unit="day
 
     '''
 
-    TN90p = TXXXp(arr, dt_arr, percentile_dict, logical_operation='gt', fill_val=fill_val, out_unit=out_unit)
+    TN90p = calc.TXXXp(arr, dt_arr, percentile_dict, logical_operation='gt', fill_val=fill_val, out_unit=out_unit)
     
     return TN90p    
 
@@ -435,7 +437,7 @@ def TG10p_calculation(arr, dt_arr, percentile_dict, fill_val=None, out_unit="day
 
     '''
 
-    TG10p = TXXXp(arr, dt_arr, percentile_dict, logical_operation='lt', fill_val=fill_val, out_unit=out_unit)
+    TG10p = calc.TXXXp(arr, dt_arr, percentile_dict, logical_operation='lt', fill_val=fill_val, out_unit=out_unit)
     
     return TG10p      
     
@@ -463,7 +465,7 @@ def TX10p_calculation(arr, dt_arr, percentile_dict, fill_val=None, out_unit="day
 
     '''
 
-    TX10p = TXXXp(arr, dt_arr, percentile_dict, logical_operation='lt', fill_val=fill_val, out_unit=out_unit)  
+    TX10p = calc.TXXXp(arr, dt_arr, percentile_dict, logical_operation='lt', fill_val=fill_val, out_unit=out_unit)  
     
     return TX10p      
     
@@ -490,7 +492,7 @@ def TN10p_calculation(arr, dt_arr, percentile_dict, fill_val=None, out_unit="day
     #.. warning:: If "arr" is a masked array, the parameter "fill_val" is ignored, because it has no sense in this case.
 
 
-    TN10p = TXXXp(arr, dt_arr, percentile_dict, logical_operation='lt', fill_val=fill_val, out_unit=out_unit)   
+    TN10p = calc.TXXXp(arr, dt_arr, percentile_dict, logical_operation='lt', fill_val=fill_val, out_unit=out_unit)   
     
     return TN10p    
 
@@ -521,7 +523,7 @@ def WSDI_calculation(arr, dt_arr, percentile_dict, fill_val=None, N=6, out_unit=
     #.. warning:: If "arr" is a masked array, the parameter "fill_val" is ignored, because it has no sense in this case.
  
         
-    WSDI = WCSDI(arr, dt_arr, percentile_dict, logical_operation='gt', fill_val=fill_val, N=6)
+    WSDI = calc.WCSDI(arr, dt_arr, percentile_dict, logical_operation='gt', fill_val=fill_val, N=6)
 
     return WSDI 
 
@@ -551,7 +553,7 @@ def CSDI_calculation(arr, dt_arr, percentile_dict, fill_val=None, N=6, out_unit=
 
     '''
      
-    CSDI = WCSDI(arr, dt_arr, percentile_dict, logical_operation='lt', fill_val=fill_val, N=6)
+    CSDI = calc.WCSDI(arr, dt_arr, percentile_dict, logical_operation='lt', fill_val=fill_val, N=6)
 
     return CSDI
 
@@ -561,7 +563,7 @@ def R75p_calculation(arr, percentile_arr, fill_val=None, out_unit="days"):
     '''
     Calculate the R75p indice: number of moderate wet days (i.e. days with daily precipitation amount > 75th percentile of daily amount in the base period).
     
-    :param arr: daily precipitation flux (liquid form) (e.g. "pr") in mm/s
+    :param arr: daily precipitation flux (liquid form) (e.g. "pr") in mm/day
     :type arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param dt_arr: corresponding time steps vector
     :type dt_arr: numpy.ndarray (1D) of datetime objects
@@ -578,7 +580,7 @@ def R75p_calculation(arr, percentile_arr, fill_val=None, out_unit="days"):
     .. warning:: If "arr" is a masked array, the parameter "fill_val" is ignored, because it has no sense in this case.
 
     '''
-    R75p = RXXp(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=fill_val, out_unit=out_unit)
+    R75p = calc.RXXp(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=fill_val, out_unit=out_unit)
     
     return R75p    
 
@@ -587,7 +589,7 @@ def R95p_calculation(arr, percentile_arr, fill_val=None, out_unit="days"):
     '''
     Calculate the R95p indice: number of very wet days (i.e. days with daily precipitation amount > 95th percentile of daily amount in the base period).
     
-    :param arr: daily precipitation flux (liquid form) (e.g. "pr") in mm/s
+    :param arr: daily precipitation flux (liquid form) (e.g. "pr") in mm/day
     :type arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param dt_arr: corresponding time steps vector
     :type dt_arr: numpy.ndarray (1D) of datetime objects
@@ -602,7 +604,7 @@ def R95p_calculation(arr, percentile_arr, fill_val=None, out_unit="days"):
     .. warning:: If "arr" is a masked array, the parameter "fill_val" is ignored, because it has no sense in this case.
 
     '''
-    R95p = RXXp(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=fill_val, out_unit=out_unit)  
+    R95p = calc.RXXp(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=fill_val, out_unit=out_unit)  
 
     return R95p
 
@@ -611,7 +613,7 @@ def R99p_calculation(arr, percentile_arr, fill_val=None, out_unit="days"):
     '''
     Calculate the R99p indice: number of extremely wet days (i.e. days with daily precipitation amount > 99th percentile of daily amount in the base period).
     
-    :param arr: daily precipitation flux (liquid form) (e.g. "pr") in mm/s
+    :param arr: daily precipitation flux (liquid form) (e.g. "pr") in mm/day
     :type arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param dt_arr: corresponding time steps vector
     :type dt_arr: numpy.ndarray (1D) of datetime objects
@@ -627,7 +629,7 @@ def R99p_calculation(arr, percentile_arr, fill_val=None, out_unit="days"):
     .. warning:: If "arr" is a masked array, the parameter "fill_val" is ignored, because it has no sense in this case.
 
     '''
-    R99p = RXXp(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=fill_val, out_unit=out_unit) 
+    R99p = calc.RXXp(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=fill_val, out_unit=out_unit) 
     
     return R99p
 
@@ -636,7 +638,7 @@ def R75pTOT_calculation(arr, percentile_arr, fill_val=None, out_unit=None):
     '''
     Calculate the R75pTOT indice: precipitation fraction due to moderate wet days (i.e. days with daily precipitation amount > 75th percentile of daily amount in the base period) [%]
     
-    :param arr: daily precipitation flux (liquid form) (e.g. "pr") in mm/s
+    :param arr: daily precipitation flux (liquid form) (e.g. "pr") in mm/day
     :type arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param dt_arr: corresponding time steps vector
     :type dt_arr: numpy.ndarray (1D) of datetime objects
@@ -652,7 +654,7 @@ def R75pTOT_calculation(arr, percentile_arr, fill_val=None, out_unit=None):
 
     '''
     
-    R75pTOT = RXXpTOT(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=fill_val)
+    R75pTOT = calc.RXXpTOT(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=fill_val)
     
     return R75pTOT
     
@@ -661,7 +663,7 @@ def R95pTOT_calculation(arr, percentile_arr, fill_val=None, out_unit=None):
     '''
     Calculate the R95pTOT indice: precipitation fraction due to very wet days (i.e. days with daily precipitation amount > 95th percentile of daily amount in the base period) [%]
     
-    :param arr: daily precipitation flux (liquid form) (e.g. "pr") in mm/s
+    :param arr: daily precipitation flux (liquid form) (e.g. "pr") in mm/day
     :type arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param dt_arr: corresponding time steps vector
     :type dt_arr: numpy.ndarray (1D) of datetime objects
@@ -677,7 +679,7 @@ def R95pTOT_calculation(arr, percentile_arr, fill_val=None, out_unit=None):
 
     '''
        
-    R95pTOT = RXXpTOT(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=fill_val)
+    R95pTOT = calc.RXXpTOT(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=fill_val)
     
     return R95pTOT
 
@@ -685,7 +687,7 @@ def R99pTOT_calculation(arr, percentile_arr, fill_val=None, out_unit=None):
     '''
     Calculate the R99pTOT indice: precipitation fraction due to extremely wet days (i.e. days with daily precipitation amount > 99th percentile of daily amount in the base period) [%]
     
-    :param arr: daily precipitation flux (liquid form) (e.g. "pr") in mm/s
+    :param arr: daily precipitation flux (liquid form) (e.g. "pr") in mm/day
     :type arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param dt_arr: corresponding time steps vector
     :type dt_arr: numpy.ndarray (1D) of datetime objects
@@ -701,7 +703,7 @@ def R99pTOT_calculation(arr, percentile_arr, fill_val=None, out_unit=None):
 
     '''
         
-    R99pTOT = RXXpTOT(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=fill_val)
+    R99pTOT = calc.RXXpTOT(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=fill_val)
     
     return R99pTOT
 
@@ -714,7 +716,7 @@ def CD_calculation(t_arr, t_25th_percentile_dict, p_arr, p_25th_percentile_dict,
     :type t_arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param t_25th_percentile_dict: 25th percentile of daily min temperature
     :type t_25th_percentile_dict: dict
-    :param p_arr: daily precipitation amount at wet day (RR >= 1.0 mm) (e.g. "pr") in mm/s
+    :param p_arr: daily precipitation amount at wet day (RR >= 1.0 mm) (e.g. "pr") in mm/day
     :type p_arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param p_25th_percentile_dict: 25th percentile of daily precipitation amount at wet days in mm/day
     :type p_25th_percentile_dict: dict
@@ -733,7 +735,7 @@ def CD_calculation(t_arr, t_25th_percentile_dict, p_arr, p_25th_percentile_dict,
     
     '''
 
-    CD = CD_CW_WD_WW(t_arr=t_arr, t_percentile_dict=t_25th_percentile_dict, t_logical_operation='lt', 
+    CD = calc.CD_CW_WD_WW(t_arr=t_arr, t_percentile_dict=t_25th_percentile_dict, t_logical_operation='lt', 
                      p_arr=p_arr, p_percentile_dict=p_25th_percentile_dict, p_logical_operation='lt', 
                      dt_arr=dt_arr, pr_thresh = 1.0, fill_val1=fill_val1, fill_val2=fill_val2, out_unit=out_unit)
     
@@ -748,7 +750,7 @@ def CW_calculation(t_arr, t_25th_percentile_dict, p_arr, p_75th_percentile_dict,
     :type t_arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param t_25th_percentile_dict: 25th percentile of daily min temperature
     :type t_25th_percentile_dict: dict
-    :param p_arr: daily precipitation amount at wet day (RR >= 1.0 mm) (e.g. "pr") in mm/s
+    :param p_arr: daily precipitation amount at wet day (RR >= 1.0 mm) (e.g. "pr") in mm/day
     :type p_arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param p_75th_percentile_dict: 75th percentile of daily precipitation amount at wet days in mm/day
     :type p_75th_percentile_dict: dict
@@ -767,7 +769,7 @@ def CW_calculation(t_arr, t_25th_percentile_dict, p_arr, p_75th_percentile_dict,
     
     '''
 
-    CW = CD_CW_WD_WW(t_arr=t_arr, t_percentile_dict=t_25th_percentile_dict, t_logical_operation='lt', 
+    CW = calc.CD_CW_WD_WW(t_arr=t_arr, t_percentile_dict=t_25th_percentile_dict, t_logical_operation='lt', 
                      p_arr=p_arr, p_percentile_dict=p_75th_percentile_dict, p_logical_operation='gt', 
                      dt_arr=dt_arr, pr_thresh = 1.0, fill_val1=fill_val1, fill_val2=fill_val2, out_unit=out_unit)
   
@@ -784,7 +786,7 @@ def WD_calculation(t_arr, t_75th_percentile_dict, p_arr, p_25th_percentile_dict,
     :type t_arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param t_75th_percentile_dict: 75th percentile of daily min temperature
     :type t_75th_percentile_dict: dict
-    :param p_arr: daily precipitation amount at wet day (RR >= 1.0 mm) (e.g. "pr") in mm/s
+    :param p_arr: daily precipitation amount at wet day (RR >= 1.0 mm) (e.g. "pr") in mm/day
     :type p_arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param p_25th_percentile_dict: 25th percentile of daily precipitation amount at wet days in mm/day
     :type p_25th_percentile_dict: dict
@@ -803,7 +805,7 @@ def WD_calculation(t_arr, t_75th_percentile_dict, p_arr, p_25th_percentile_dict,
     
     '''
 
-    WD = CD_CW_WD_WW(t_arr=t_arr, t_percentile_dict=t_75th_percentile_dict, t_logical_operation='gt', 
+    WD = calc.CD_CW_WD_WW(t_arr=t_arr, t_percentile_dict=t_75th_percentile_dict, t_logical_operation='gt', 
                      p_arr=p_arr, p_percentile_dict=p_25th_percentile_dict, p_logical_operation='lt', 
                      dt_arr=dt_arr, pr_thresh = 1.0, fill_val1=fill_val1, fill_val2=fill_val2, out_unit=out_unit)
     
@@ -818,7 +820,7 @@ def WW_calculation(t_arr, t_75th_percentile_dict, p_arr, p_75th_percentile_dict,
     :type t_arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param t_75th_percentile_dict: 75th percentile of daily min temperature
     :type t_75th_percentile_dict: dict
-    :param p_arr: daily precipitation amount at wet day (RR >= 1.0 mm) (e.g. "pr") in mm/s
+    :param p_arr: daily precipitation amount at wet day (RR >= 1.0 mm) (e.g. "pr") in mm/day
     :type p_arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
     :param p_75th_percentile_dict: 75th percentile of daily precipitation amount at wet days in mm/day
     :type p_75th_percentile_dict: dict
@@ -837,7 +839,7 @@ def WW_calculation(t_arr, t_75th_percentile_dict, p_arr, p_75th_percentile_dict,
     
     '''
 
-    WW = CD_CW_WD_WW(t_arr=t_arr, t_percentile_dict=t_75th_percentile_dict, t_logical_operation='gt', 
+    WW = calc.CD_CW_WD_WW(t_arr=t_arr, t_percentile_dict=t_75th_percentile_dict, t_logical_operation='gt', 
                      p_arr=p_arr, p_percentile_dict=p_75th_percentile_dict, p_logical_operation='gt', 
                      dt_arr=dt_arr, pr_thresh = 1.0, fill_val1=fill_val1, fill_val2=fill_val2, out_unit=out_unit)
         

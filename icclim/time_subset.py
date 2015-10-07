@@ -74,7 +74,7 @@ def get_map_info_slice(slice_mode):
         centroid_day=1
         centroid_month=7
         
-    elif slice_mode=='month' or slice_mode==None:
+    elif slice_mode=='month':
         months=range(1,13)
         centroid_day=16
 
@@ -227,7 +227,8 @@ def get_dict_temporal_slices(dt_arr, values_arr, fill_value, calend='gregorian',
     
     return_dict = OrderedDict()
     
-    map_info_slice=get_map_info_slice(slice_mode=temporal_subset_mode)
+    if temporal_subset_mode != None:
+        map_info_slice=get_map_info_slice(slice_mode=temporal_subset_mode)
     ###########################
     
     ## step 1: list of all years
@@ -257,8 +258,15 @@ def get_dict_temporal_slices(dt_arr, values_arr, fill_value, calend='gregorian',
     
     ## step 2: subset 
     
+    # whole selected time range will be processed
+    if temporal_subset_mode == None:
+        dt_centroid = time_range[0] + (time_range[1]-time_range[0])/2
+        dt_bounds = time_range
+        return_dict['whole_time_range'] = (dt_centroid, dt_bounds, dt_arr, values_arr, fill_value)
+    
+    
     # all or selected months of each year will be processed 
-    if temporal_subset_mode == None or temporal_subset_mode == 'month' or temporal_subset_mode[0] == 'month':
+    elif temporal_subset_mode == 'month' or temporal_subset_mode[0] == 'month':
         
         for y in years:                          
             for m in map_info_slice[str(temporal_subset_mode)]['months']:
@@ -343,13 +351,13 @@ def get_dict_temporal_slices(dt_arr, values_arr, fill_value, calend='gregorian',
             return_dict[temporal_subset_mode, y] = (dt_centroid, dt_bounds, dt_arr_subset_i, arr_subset_i, fill_value)
         
             #print y
-
+    
 
     return return_dict
         
         
             
-def get_indices_temp_aggregation(dt_arr, month=None, year=None, f=0):    
+def get_indices_temp_aggregation(dt_arr, month, year, f=0):    
     '''
     
     Return indices used for temporal aggregation.
