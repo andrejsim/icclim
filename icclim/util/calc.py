@@ -596,7 +596,7 @@ def get_anomaly(arr, arr2, fill_val, out_unit=None):
     else:
         return anomaly
 
-def get_wet_days(arr, fill_val):
+def get_wet_days(arr, fill_val=None):
     '''
     wet days: days with precipitation amount >= 1.0 mm
     
