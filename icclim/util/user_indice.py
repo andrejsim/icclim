@@ -1,3 +1,8 @@
+#  Copyright CERFACS (http://cerfacs.fr/)
+#  Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
+#
+#  Author: Natalia Tatarinova
+
 import util.calc as calc
 
 # map with required parameters (for user defined indices)  
@@ -6,35 +11,29 @@ map_calc_params_required = {
                               'min': [],
                               'sum': [],
                               'mean': [],
-                              'nb_events': ['logical_operation', 'thresh'], 
+                              'nb_events': ['logical_operation', 'thresh'], # 'link_logical_operations' ('and' or 'or' ) is required if multivariable indice
                               'max_number_consecutive_events': ['logical_operation', 'thresh'],
                               'run_mean': ['extreme_mode', 'window_width'],
                               'run_sum': ['extreme_mode', 'window_width'],
-                              'anomalie': ['ref_time_range']
+                              'anomaly': ['ref_time_range'] # past period
                               }   
 
 # map with optional parameters (for user defined indices)  
 map_calc_params_optional = {
-                              'max': ['coef', 'logical_operation', 'thresh', 'date_event'], # filter: ['>=', 1.0]
+                              'max': ['coef', 'logical_operation', 'thresh', 'date_event'], 
                               'min': ['coef', 'logical_operation', 'thresh', 'date_event'],
-                              'sum': ['coef', 'logical_operation', 'thresh'], #'date_event'],
-                              'mean': ['coef', 'logical_operation', 'thresh'], #'date_event'],
+                              'sum': ['coef', 'logical_operation', 'thresh'], 
+                              'mean': ['coef', 'logical_operation', 'thresh'], 
                               'nb_events': ['coef', 'date_event'],
-                              #'nb_events': ['coef', 'cond2', 'logical_operator_conditions', 'date_event'], 
-                              # if 'cond2' --> 'logical_operator_conditions' is required, 
-                              # if 2 vars ---> 'cond2' is applied to the second var
-                              # threshold in cond1 or cond2 could be a single number, list of numbers, or percentile thresh
-                              # threshold must be the same units !!!
-                              # 'max_number_consecutive_events': ['coef', 'cond2', 'logical_operator_conditions', 'date_event'],
                               'max_number_consecutive_events': ['coef', 'date_event'],
                               'run_mean': ['coef', 'date_event'],
                               'run_sum': ['coef', 'date_event'],
-                              'anomalie': []
+                              'anomaly': []
                               }   
 
-def check_params(user_indice):
+def check_params(user_indice, time_range=None, vars=None):
     '''
-    Check if a set of user parameters is correct for selected calc_operation
+    Checks if a set of user parameters is correct for selected calc_operation
     '''
     
     if 'indice_name' not in user_indice.keys():
@@ -52,9 +51,26 @@ def check_params(user_indice):
         raise IOError('All theses parameters are required: {0}'.format(required_params))
     
     if calc_op=='nb_events' and type(user_indice['thresh'])==str:
-        if ('out_units' or 'var_type') not in user_indice.keys():
-            raise IOError("If threshold value is a percentile,  'out_units' and 'var_type' are required")
+        if ('var_type') not in user_indice.keys():
+            raise IOError("If threshold value is a percentile,  'var_type' is required.")
         
+    if calc_op=='anomaly':
+        if time_range==None:
+            raise IOError(" 'time_range' is required for anomalies computing.")
+        
+    if type(vars) is list and len(vars)>1:
+        if calc_op=='nb_events':
+            if type(user_indice['logical_operation']) is not list    or    type(user_indice['thresh']) is not list:
+                raise IOError("If indice is based on {0} variables, then {0} 'logical_operations' and {0} 'thresh' " 
+                              "are required (each one must be a list with {0} elements).".format(len(vars)) )
+            if type(user_indice['logical_operation']) is list and 'link_logical_operations' not in user_indice.keys():
+                raise IOError("If indice is based on {0} variables, then 'link_logical_operations' ('or' or 'and') is required.".format(len(vars)))
+            
+        for i in range(len(vars)):
+            if type(user_indice['thresh'][i]) is str:
+                if ('var_type') not in user_indice.keys():
+                    raise IOError("If at least one of thresholds is a percentile,  'var_type' "
+                                    "is required ('var_type' could be a list).")
 
 
 def get_given_params(user_indice):
@@ -67,6 +83,7 @@ def get_given_params(user_indice):
 
 
 def set_params(user_indice):
+
     given_params = get_given_params(user_indice)
     
     class F:
@@ -78,10 +95,10 @@ def set_params(user_indice):
     setattr(obj, 'logical_operation', None)
     setattr(obj, 'thresh', None)
     setattr(obj, 'coef', 1.0)
-    setattr(obj, 'fill_val', None)
     setattr(obj, 'date_event', False)
-    setattr(obj, 'out_units', None)
     setattr(obj, 'var_type', None)
+    setattr(obj, 'ref_time_range', None)
+    setattr(obj, 'link_logical_operation', 'and')
     
     
     for p in given_params:
@@ -91,113 +108,185 @@ def set_params(user_indice):
     
 
 
-def get_user_indice(user_indice, arr, fill_val, dt_arr=None, pctl_thresh=None):
-    ### 'dt_arr' and 'pctl_thresh' are required for percentile-based indices, i.e. when a threshold is a percentile values
+def get_user_indice_params(user_indice, var_name, out_unit):
+    
+    if (('date_event' in user_indice) and user_indice['calc_operation'] in ['mean', 'sum']) or ('date_event' not in user_indice):
+        user_indice['date_event']=False    
+    
+    ui = {}        
+    
+    if type(var_name) != list:
+        var_name = [var_name]
+    
+    i=0    
+    for v in var_name:
+        user_indice_var = {}
+        for param in user_indice.keys():
+            if (type(user_indice[param]) is list) and param != 'ref_time_range':
+                param_value = user_indice[param][i]
+            else:
+                param_value = user_indice[param]
+            
+            user_indice_var[param] = param_value
+
+        
+        ui[v] = user_indice_var
+        i+=1
+    
+    i=0
+    if len(ui)>1:
+        ui['type']='user_indice_multivariable' 
+        
+        for v in var_name:
+            if type(ui[v]['thresh'])== str:
+                ui['type']='user_indice_percentile_based_multivariable' 
+
+           
+    else:
+        if 'thresh' in ui[ui.keys()[0]].keys():
+            if type(ui[ui.keys()[0]]['thresh']) == str:
+                ui['type']='user_indice_percentile_based'
+            else:
+                ui['type']='user_indice_simple'
+        else:
+            ui['type']='user_indice_simple'
+    
+    ####
+    ui['indice_name']=ui[var_name[0]]['indice_name'] 
+    ui['date_event']=ui[var_name[0]]['date_event']
+    ui['calc_operation']=ui[var_name[0]]['calc_operation']
+    
+    if ui['calc_operation']=='anomaly':
+        ui['ref_time_range']=ui[var_name[0]]['ref_time_range'] 
+    
+    
+    
+    
+    return ui # If ui[var]['thresh'] is not string (i.e. not percentile threshold), then ui[var]['var_type'] is ignored
+
+
+
+
+def get_user_indice(user_indice, arr, fill_val, vars, out_unit='days', dt_arr=None, pctl_thresh=None):
+    ### 'dt_arr' and 'pctl_thresh' are required for percentile-based indices, i.e. when a threshold is a percentile
     ### 'pctl_thresh' could be a dictionary with daily percentiles (for temperature variables) 
     ### or an 2D array with percentiles (for precipitation variables)
-    
-    #check_params(user_indice) 
-    set_params(user_indice)  
-    
-    #print obj.logical_operation, obj.thresh, fill_val, obj.date_event, obj.coef
+    ### vars: list of target variable(s)
     
     
-    if obj.calc_operation in ['min', 'max', 'mean', 'sum']:
-        # simple_stat(arr, stat_operation, logical_operation=None, thresh=None, coef=1.0, fill_val=None, index_event=False)
-        res = calc.simple_stat(arr, 
-                        stat_operation=obj.calc_operation,
-                        logical_operation=obj.logical_operation,
-                        thresh=obj.thresh,
-                        coef=obj.coef,
-                        fill_val=fill_val,
-                        index_event=obj.date_event)
-
-    elif obj.calc_operation == 'nb_events':
-        
-        if type(obj.thresh) != str: # thresh is float or int 
-            # get_nb_days(arr, logical_operation, thresh, coef=1.0, fill_val=None, index_event=False)
-            res = calc.get_nb_days(arr,
-                              logical_operation=obj.logical_operation,
-                              thresh=obj.thresh,
-                              coef=obj.coef,
-                              fill_val=fill_val,
-                              index_event=obj.date_event) 
-        else: # thresh is str: 'p90' or 'p20'
+    ### for multivariable indices (e.g. TX > 25 and TN > 10; TX > 90p and TN > 20p; TG > 90p and RR > 75p; etc):
+    ### user_indice, arr, fill_val et pctl_thresh are dictionaries
+    
+    
+    ### for anomaly: arr is list with two arrays
+    
+    indice_type = user_indice['type']
+    
+    if indice_type not in ['user_indice_multivariable', 'user_indice_percentile_based_multivariable']:
+    
+        for v in vars:
+    
+            set_params(user_indice[v])  
+       
             
-            if obj.var_type == 't':
-                # TXXXp(arr, dt_arr, percentile_dict, logical_operation, fill_val=None, out_unit="days")
-                
-                #### ADD: coef=obj.coef, index_event=obj.date_event
-                res = calc.TXXXp(arr, 
-                                 dt_arr, 
-                                 logical_operation=obj.logical_operation,
-                                 percentile_dict=pctl_thresh,  
-                                 fill_val=fill_val, 
-                                 out_unit=obj.out_units,
-                                 index_event=obj.date_event)
-                
-            elif obj.var_type == 'p':
-                # RXXp(arr, percentile_arr, logical_operation='gt', pr_thresh = 1.0, fill_val=None, out_unit="days")
-                
-                #### ADD: coef=obj.coef, index_event=obj.date_event
-                
-                res = calc.RXXp(arr, 
-                           logical_operation=obj.logical_operation,
-                           percentile_arr=pctl_thresh, 
-                            
-                           pr_thresh = 1.0, # only for wet days, i.e. values >= 1.0
-                           
-                           fill_val=fill_val, 
-                           out_unit=obj.out_units,
-                           index_event=obj.date_event)
-                
-            
-                        
-    elif obj.calc_operation == 'max_number_consecutive_events':
-        # get_max_nb_consecutive_days(arr, logical_operation, thresh, coef=1.0, fill_val=None, index_event=False)
-        res = calc.get_max_nb_consecutive_days(arr, 
-                                          logical_operation=obj.logical_operation, 
-                                          thresh=obj.thresh, 
-                                          coef=obj.coef, 
-                                          fill_val=fill_val, 
-                                          index_event=obj.date_event)       
+            if obj.calc_operation in ['min', 'max', 'mean', 'sum']:
+                # simple_stat(arr, stat_operation, logical_operation=None, thresh=None, coef=1.0, fill_val=None, index_event=False)
+                res = calc.simple_stat(arr, 
+                                stat_operation=obj.calc_operation,
+                                logical_operation=obj.logical_operation,
+                                thresh=obj.thresh,
+                                coef=obj.coef,
+                                fill_val=fill_val,
+                                index_event=obj.date_event)
         
-        
-    elif obj.calc_operation in ['run_mean', 'run_sum']:
-        if obj.calc_operation == 'run_mean':
-            stat_m = 'mean'
-        elif obj.calc_operation == 'run_sum':
-            stat_m = 'sum'
-        
-        # get_run_stat(arr, window_width, stat_mode, extreme_mode, coef=1.0, fill_val=None, index_event=False)
-        res = calc.get_run_stat(arr, 
-                           window_width=obj.window_width, 
-                           stat_mode=stat_m, 
-                           extreme_mode=obj.extreme_mode, 
-                           coef=obj.coef, 
-                           fill_val=fill_val, 
-                           index_event=obj.date_event)
-        
-#     elif obj.calc_operation == 'anomalie':
-#         res = calc.get_anomalie(arr, arr2)
+            elif obj.calc_operation == 'nb_events':
+                
+                # WARNING: if precipitation var ===>  values < 1.0 mm must be filtered
 
+                if type(obj.thresh) != str:
+                    thresh_=obj.thresh # threshold is int or float
+                else:          
+                    thresh_=pctl_thresh
+                
+                # get_nb_events(arr, logical_operation, thresh, fill_val=None, index_event=False, out_unit="days", dt_arr=None, coef=1.0)
+                res = calc.get_nb_events(arr=arr, 
+                                    logical_operation=obj.logical_operation, 
+                                    thresh=thresh_, 
+                                    fill_val=fill_val, 
+                                    index_event=obj.date_event, 
+                                    out_unit=out_unit, 
+                                    dt_arr=dt_arr, 
+                                    coef=obj.coef)
+    
+                                
+            elif obj.calc_operation == 'max_number_consecutive_events':
+                # get_max_nb_consecutive_days(arr, logical_operation, thresh, coef=1.0, fill_val=None, index_event=False)
+                res = calc.get_max_nb_consecutive_days(arr, 
+                                                  logical_operation=obj.logical_operation, 
+                                                  thresh=obj.thresh, 
+                                                  coef=obj.coef, 
+                                                  fill_val=fill_val, 
+                                                  index_event=obj.date_event,
+                                                  out_unit=out_unit)       
+                
+                
+            elif obj.calc_operation in ['run_mean', 'run_sum']:
+                if obj.calc_operation == 'run_mean':
+                    stat_m = 'mean'
+                elif obj.calc_operation == 'run_sum':
+                    stat_m = 'sum'
+                
+                # get_run_stat(arr, window_width, stat_mode, extreme_mode, coef=1.0, fill_val=None, index_event=False)
+                res = calc.get_run_stat(arr, 
+                                   window_width=obj.window_width, 
+                                   stat_mode=stat_m, 
+                                   extreme_mode=obj.extreme_mode, 
+                                   coef=obj.coef, 
+                                   fill_val=fill_val, 
+                                   index_event=obj.date_event)
+                
+            elif obj.calc_operation == 'anomaly':
+                res = calc.get_anomaly(arr[0], # future
+                                       arr[1], # past (ref)
+                                       fill_val=fill_val,
+                                       out_unit=out_unit)
+    
+    
+    else: # if indice_type in ['user_indice_multivariable', 'user_indice_multivariable_percentile_based']:
+        
+        binary_arrs = []
+
+        for v in vars:
+            
+            #check_params(user_indice) 
+            set_params(user_indice[v])
+            
+            if type(obj.thresh) != str:
+                thresh_=obj.thresh # threshold is int or float
+            else:          
+                thresh_=pctl_thresh[v]
+
+                
+            # get_binary_arr(arr, logical_operation, thresh, dt_arr=None)
+            bin_arr = calc.get_binary_arr(arr=arr[v], 
+                                     logical_operation=obj.logical_operation, 
+                                     thresh=thresh_, 
+                                     dt_arr=dt_arr,
+                                     fill_val = fill_val[v])
+            
+            
+            
+            binary_arrs.append(bin_arr)
+
+
+        # get_nb_events_multivar(bin_arrs, link_logical_operation, index_event=False, out_unit="days", dt_arr=None)
+        res = calc.get_nb_events_multivar(bin_arrs=binary_arrs, 
+                                          link_logical_operation=obj.link_logical_operation,
+                                          index_event=obj.date_event,
+                                          out_unit=obj.out_unit)
+            
+    
     
     return res
 
 
-# user_indice = {'indice_name': 'TEST',
-#                'calc_operation': 'nb_events',
-#                 'logical_operation': 'e',
-#                 'thresh': 0,
-#                #'stat_oper': 'max',
-#                #'window': 6,
-#                #'coef': 1,
-#                #'date_event': True
-#                } 
-# 
-# import numpy 
-# arr = numpy.random.randint(-5, 10, size=(5,2,3))*1.0
-# print arr
-# print "==="
-# 
-# print get_user_indice(user_indice)
