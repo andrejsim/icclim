@@ -808,6 +808,7 @@ def get_indice_from_dict_temporal_slices(indice_name,
             for v in vars_dict.keys():
                 arrs[v] = vars_dict[v]['temporal_slices'][slice][3]
                 fv[v] = vars_dict[v]['fill_value']
+
             
             if user_indice['date_event']==True:
                 
@@ -1067,7 +1068,7 @@ def get_indice_from_dict_temporal_slices(indice_name,
                         for v in vars_dict.keys():
                             
                             fv[v] = vars_dict[v]['fill_value']
-                            
+
                             if 'var_type' in vars_dict[v].keys():
                                 
                                 if vars_dict[v]['var_type']=='p':
@@ -1079,14 +1080,17 @@ def get_indice_from_dict_temporal_slices(indice_name,
                                     
                                 elif vars_dict[v]['var_type']=='t':
                                     
-                                    arrs[v] = arr=vars_dict[v]['temporal_slices'][slice][3]
+                                    arrs[v] = vars_dict[v]['temporal_slices'][slice][3]
                                     
                                     if current_intersecting_year == -9999:
                                         pt[v] = pctl_thresh[v]['without_bootstrapping']
                                     else:
                                         pt[v] = pctl_thresh[v]['bootstrapping']
-                        
-                        
+                                        
+                            else: ### if threshold is a number 
+                                arrs[v] = vars_dict[v]['temporal_slices'][slice][3]
+                                pt[v] = user_indice[v]['thresh']
+
                         
                         dic_args = {'user_indice': user_indice, 'arr': arrs, 
                                     'fill_val': fv, 'vars': vars_dict.keys(),

@@ -112,7 +112,7 @@ def get_user_indice_params(user_indice, var_name, out_unit):
     
     if (('date_event' in user_indice) and user_indice['calc_operation'] in ['mean', 'sum']) or ('date_event' not in user_indice):
         user_indice['date_event']=False    
-    
+        
     ui = {}        
     
     if type(var_name) != list:
@@ -120,9 +120,12 @@ def get_user_indice_params(user_indice, var_name, out_unit):
     
     i=0    
     for v in var_name:
+        
         user_indice_var = {}
+        
         for param in user_indice.keys():
             if (type(user_indice[param]) is list) and param != 'ref_time_range':
+                
                 param_value = user_indice[param][i]
             else:
                 param_value = user_indice[param]
@@ -133,7 +136,7 @@ def get_user_indice_params(user_indice, var_name, out_unit):
         ui[v] = user_indice_var
         i+=1
     
-    i=0
+
     if len(ui)>1:
         ui['type']='user_indice_multivariable' 
         
