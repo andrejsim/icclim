@@ -283,7 +283,7 @@ def get_user_indice(user_indice, arr, fill_val, vars, out_unit='days', dt_arr=No
         res = calc.get_nb_events_multivar(bin_arrs=binary_arrs, 
                                           link_logical_operation=obj.link_logical_operation,
                                           index_event=obj.date_event,
-                                          out_unit=obj.out_unit)
+                                          out_unit=out_unit)
             
     
     
