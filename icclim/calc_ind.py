@@ -1,13 +1,13 @@
 from calc_indice import *
-from calc_indice_perc import *
 
-# - TG -
-# - TX -
-# - TN -
-# - TXx -
-# - TNx -
-# - TXn -
-# - TNn -
+
+# - TG 
+# - TX 
+# - TN 
+# - TXx 
+# - TNx 
+# - TXn 
+# - TNn 
 # - DTR
 # - ETR
 # - vDTR
@@ -46,14 +46,12 @@ from calc_indice_perc import *
 # - R95pTOT
 # - R99p
 # - R99pTOT
-# - CD
-# - CW
-# - WD
-# - WW
 
 
 
-def zzz(indice_name, **kwargs):# arr1, fill_val1
+### TODO: rename this function
+
+def zzz(indice_name, **kwargs):
     if indice_name == 'TG' :
         res = TG_calculation(**kwargs)
         
@@ -203,17 +201,5 @@ def zzz(indice_name, **kwargs):# arr1, fill_val1
     elif indice_name == 'R99pTOT':
         res = R99pTOT_calculation(**kwargs)            
        
-       
-    elif indice_name == 'CD':
-        res = CD_calculation(**kwargs)            
-       
-    elif indice_name == 'CW':
-        res = CW_calculation(**kwargs)            
-       
-    elif indice_name == 'WD':
-        res = WD_calculation(**kwargs)  
-        
-    elif indice_name == 'WW':
-        res = WW_calculation(**kwargs)
         
     return res        

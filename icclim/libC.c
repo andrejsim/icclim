@@ -34,8 +34,6 @@ void setGlobalVariables(int _sizeT,int _sizeI,int _sizeJ,float _fill_value, int 
 double getElementAt(const float *table, int t, int i, int j);
 float find_max_len_consec_sequence_1d(const float *indata,int i, int j, float thresh, float fill_val, char *operation, int *index_event_start, int *index_event_end);
 void find_max_len_consec_sequence_3d(const float *indata, int _sizeT,int _sizeI,int _sizeJ, double *outdata, float temp, float fill_val, char *operation, int *tab_index_event_start, int *tab_index_event_end);
-//float get_max_sum_window_1d(const float *indata, int i, int j, int w_width, float fill_val);
-//void find_max_sum_slidingwindow_3d(const float *indata, int _sizeT, int _sizeI, int _sizeJ, double *outdata, int w_width, float fill_val);
 float find_GSL_1d(const float *indata,int i, int j, float thresh, float fill_val, int indexMiddleOfYear);
 void find_GSL_3d(const float *indata, int _sizeT,int _sizeI,int _sizeJ, double *outdata, float temp, float fill_val, int indexMiddleOfYear);
 double getElementAt_2(const float *table, int t, int i, int j);
@@ -71,9 +69,6 @@ double getElementAt(const float *table, int t, int i, int j)
 }
 
 
-
-
-// ERROR
 //Segmentation fault (core dumped)
 //http://stackoverflow.com/questions/13654449/error-segmentation-fault-core-dumped
 
@@ -286,7 +281,7 @@ float find_max_len_consec_sequence_1d(const float *indata,int i, int j, float th
 }
 
 
-// fonction appelee depuis python 
+// function called from Python
 void find_max_len_consec_sequence_3d(const float *indata, int _sizeT,int _sizeI,int _sizeJ, double *outdata, float thresh, float fill_val, char *operation, int *tab_index_event_start, int *tab_index_event_end)
 {
 // find max length of a consecutive sequence in 3D array (along time axis) in a logical condition
@@ -309,74 +304,6 @@ void find_max_len_consec_sequence_3d(const float *indata, int _sizeT,int _sizeI,
         }
 }
     
-
-//float get_max_sum_window_1d(const float *indata, int i, int j, int w_width, float fill_val)
-//{
-//    float max_sum=0.0;
-//    float sum=0.0;
-//    int t;
-//    float val, val_to_subtract;
-//    int all_fillval = 1;
-//
-//    // initialize max_sum [for the first (w_width-1) elements]
-//    for (t=0; t<w_width; t++)
-//    {
-//        val = getElementAt(indata,t,i,j);
-//
-//        if (val==fill_val)
-//          val=0.0;
-//        else
-//          all_fillval = 0;
-//
-//        sum += val;
-//    }
-//
-//    max_sum = sum;
-//
-//    // calculate the current sum, and compare it to the max_sum
-//    for (t=w_width; t<=sizeT-1; t++)
-//    {
-//        val = getElementAt(indata,t,i,j);
-//        if (val==fill_val)
-//          val=0.0;
-//        else
-//          all_fillval = 0;
-//
-//        sum += val;                                 // previous sum + following element
-//
-//        val_to_subtract = getElementAt(indata,t-w_width,i,j);
-//        if (val_to_subtract==fill_val) val_to_subtract=0.0;
-//        sum -= val_to_subtract;                      // current sum
-//
-//        if (sum > max_sum) max_sum =  sum;
-//
-//    }
-//
-//    if (all_fillval == 1) max_sum = fill_val;
-//
-//    return max_sum;
-//}
-//
-//
-//void find_max_sum_slidingwindow_3d(const float *indata, int _sizeT, int _sizeI, int _sizeJ, double *outdata, int w_width, float fill_val)
-//{
-//// find max sum of a consecutif sequence of w_width elements (sliding window of size=w_width) (along time axis)
-//
-//    setGlobalVariables(_sizeT,_sizeI,_sizeJ, fill_value, percentile);
-//    int i,j;
-//
-//        for (i = 0; i < sizeI; i++)
-//        {
-//            for (j = 0; j < sizeJ; j++)
-//            {
-//                outdata[i*sizeJ+j] = get_max_sum_window_1d(indata, i, j, w_width, fill_val);
-//            }
-//        }
-//}
-//
-
-
-
 
 
 // indexMiddleOfYear is the index of the 1st day in the 2nd semester for which we have a value for temperature
@@ -540,7 +467,7 @@ for i in range(len(a)):
 }
 
 
-// fonction appelee depus python 
+// function called from Python
 void WSDI_CSDI_3d(const float *indata, int _sizeT,int _sizeI,int _sizeJ, double *outdata, int N) 
 {
     setGlobalVariables(_sizeT,_sizeI,_sizeJ, fill_value, percentile);
@@ -557,7 +484,7 @@ void WSDI_CSDI_3d(const float *indata, int _sizeT,int _sizeI,int _sizeJ, double 
 
 
 /////////////////////////////////////////////////////////////////////////////////////
-// percentiles computation
+// percentiles computation: begin
 //////////////////////////////////////////////////////////////////////////////////// 
 
 
@@ -774,6 +701,10 @@ void qs(float* s_arr, int first, int last)
     if (first < j)
         qs(s_arr, first, j);
 }
+
+/////////////////////////////////////////////////////////////////////////////////////
+// percentiles computation: end
+////////////////////////////////////////////////////////////////////////////////////
 
 
 void get_run_stat_3d(const float *indata, int _sizeT, int _sizeI, int _sizeJ, double *outdata, int w_width, float fill_val, char * stat_mode, char * extreme_mode, int *tab_index_event)
