@@ -315,7 +315,7 @@ def get_percentile_dict(arr, dt_arr, percentile, window_width, only_leap_years=F
 ### All percentile indices based on precipitation use percentile thresholds 
 ### computed from set of "wet" values i.e. values >=1.0 mm (i.e. precipitation=True)
 ### If precipitation=False: all values will be processed.
-def get_percentile_arr(arr, percentile, window_width, callback=None, callback_percentage_start_value=0, 
+def get_percentile_arr(arr, percentile, callback=None, callback_percentage_start_value=0, 
                         callback_percentage_total=100, chunk_counter=1, precipitation=True, fill_val=None,
                         interpolation="hyndman_fan"):
     '''
@@ -329,9 +329,6 @@ def get_percentile_arr(arr, percentile, window_width, callback=None, callback_pe
     
     :param percentile: percentile to compute which must be between 0 and 100 inclusive
     :type percentile: int
-    
-    :param window_width: window width, must be odd
-    :type window_width: int
     
     :param callback: progress bar, if ``None`` progress bar will not be printed
     :type callback: :func:`callback.defaultCallback2`
