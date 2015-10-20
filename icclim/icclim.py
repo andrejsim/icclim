@@ -901,8 +901,7 @@ def get_indice_from_dict_temporal_slices(indice_name,
                             if slice_counter==0 and ytd_counter==0: 
                                  
                                 pctl_arr = calc_percentiles.get_percentile_arr(arr=vars_dict[v]['base']['values_arr'], 
-                                                                                 percentile=pctl_value, 
-                                                                                 window_width=window_width,                                                                      
+                                                                                 percentile=pctl_value,                                                            
                                                                                  callback=None, 
                                                                                  callback_percentage_start_value=0, 
                                                                                 callback_percentage_total=100, 
