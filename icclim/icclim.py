@@ -1149,8 +1149,8 @@ def get_indice_from_dict_temporal_slices(indice_name,
             #### when we average indice_slice_i, values are float
             if out_unit=='days': 
                 indice_slice = numpy.around(indice_slice) ### we need them to be integer for out_unit="days"
-            else:
-                indice_slice = numpy.around(indice_slice, decimals=2)
+#             else:
+#                 indice_slice = numpy.around(indice_slice, decimals=2)
 
         
         
