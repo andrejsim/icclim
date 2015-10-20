@@ -29,7 +29,7 @@ import maps
 import calc_ind
 import util.calc as calc
 
-import util.user_indice as ui
+from util import user_indice as ui
 
 import sys
 

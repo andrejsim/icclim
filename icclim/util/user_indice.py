@@ -3,7 +3,7 @@
 #
 #  Author: Natalia Tatarinova
 
-import util.calc as calc
+import calc
 
 # map with required parameters (for user defined indices)  
 map_calc_params_required = {
