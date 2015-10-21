@@ -601,7 +601,7 @@ def CDD_calculation(arr, fill_val=None, threshold=1.0):
 
 def PRCPTOT_calculation(arr, fill_val=None):
     '''
-    Calculates the PRCPTOT indice: precipitation sum [mm]
+    Calculates the PRCPTOT indice: total precipitation in wet days [mm]
     
     :param arr: daily precipitation (liquid form) flux (e.g. "pr") in mm/day
     :type arr: numpy.ndarray (3D) or numpy.ma.MaskedArray (3D)
