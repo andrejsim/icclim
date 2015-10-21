@@ -174,7 +174,7 @@ explained in this article: `Avoiding Inhomogeneity in Percentile-Based Indices o
 Temperature Extremes (Zhang et al.) <http://etccdi.pacificclimate.org/docs/Zhangetal05JumpPaper.pdf>`_  - see 
 the resampling algorithm in the section **4. Removing the "jump"**.
 
-
+.. warning:: Computing of percentile thresholds with the bootstrapping procedure may take some time! For example, a 30-yr base period requires (30-1) times of computing percentiles for each "in-base" year!, i.e. 30*(30-1) times in total (+1 time without bootstrapping for "out-of-base" years). 
 
 
 
@@ -370,11 +370,17 @@ value									description
 
 - key ``date_event`` allows to keep date(s) of the event, it if is ``True``:
 
- 	- For simple statistics (min, max) in output netCDF file will be created "date_event" variable with numerical dates of the event for each pixel. 
+ 	- For simple statistics (min, max) in output netCDF file will be created "date_event" variable with numerical dates of the first occurrence of the event for each pixel. 
  		
  	- For other operations in output netCDF file will be created "date_event_start" and "date_event_end" variables with numerical dates of the event for each pixel.
  
 	.. note:: The "date_event", "date_event_start" and "date_event_end" netCDF variables have the same shape as indice's one.
+	
+	.. warning:: "Date_event"/"date_event_start"/"date_event_end" has no value:
+	
+			- for certain pixels, if event is not found, 
+			- for all pixels of base period (for temperature percentile-based indices) - it is not possible to determine the correct date of the event because of averaging of indice in "in-base" year.   	
+
 
 - key ``var_type`` is used to define the method of percentile thresholds computing. The methods are different for temperature and precipitation variables (more detailed :ref:`here <pctl_methods_label>`):
 
@@ -602,7 +608,7 @@ Example 10: Custom indice (number of days when daily precipitation amount > 85th
 Example 11: Custom indice (max number of consecutive days when tasmax >= 25 degrees Celsius + date)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. note:: Two additional variables will be created in output netCDF file: "date_event_start" (the first date of the found sequence) and "date_event_end" (the last date of the found sequence).
+.. note:: Two additional variables will be created in output netCDF file: "date_event_start" (the first date of the found sequence) and "date_event_end" (the last date of the found sequence). 
 
 .. warning:: If there are several sequences of the same length, the "date_event_start" and "date_event_end" will correspond to the *first* sequence.
 
