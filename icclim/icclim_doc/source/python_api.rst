@@ -379,7 +379,7 @@ value									description
 	.. warning:: "Date_event"/"date_event_start"/"date_event_end" has no value:
 	
 			- for certain pixels, if event is not found, 
-			- for all pixels of base period (for temperature percentile-based indices) - it is not possible to determine the correct date of the event because of averaging of indice in "in-base" year.   	
+			- for all pixels of "in-base" years (years in base period) for temperature percentile-based indices - it is not possible to determine the correct date of the event because of averaging of indice in "in-base" year.   	
 
 
 - key ``var_type`` is used to define the method of percentile thresholds computing. The methods are different for temperature and precipitation variables (more detailed :ref:`here <pctl_methods_label>`):
