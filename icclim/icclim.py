@@ -250,15 +250,24 @@ def indice(in_files,
     util_nc.copy_var_attrs(ncVar, ind)
     
     ### we create new variable(s) to save date of event
-    ### TODO: add 'calendar' and 'units' attributes (the same as of the variable 'time' from input netCDF file)
+
     if indice_type.startswith('user_indice_') and user_indice['date_event']==True:
         if user_indice['calc_operation'] in ['min', 'max']:            
             date_event = onc.createVariable('date_event', 'f', indice_dim, fill_value = fill_val)
+            # we set the same 'calendar' and 'units' attributes as those of netCDF var 'time'
+            date_event.__setattr__('calendar', ncVar_time.calendar)
+            date_event.__setattr__('units', ncVar_time.units)
+            
         elif user_indice['calc_operation'] in ['nb_events', 'max_number_consecutive_events', 'run_mean', 'run_sum']:
             date_event_start = onc.createVariable('date_event_start', 'f', indice_dim, fill_value = fill_val)
-            date_event_end = onc.createVariable('date_event_end', 'f', indice_dim, fill_value = fill_val)
+            # we set the same 'calendar' and 'units' attributes as those of netCDF var 'time'
+            date_event_start.__setattr__('calendar', ncVar_time.calendar)
+            date_event_start.__setattr__('units', ncVar_time.units)
             
-    
+            date_event_end = onc.createVariable('date_event_end', 'f', indice_dim, fill_value = fill_val)
+            # we set the same 'calendar' and 'units' attributes as those of netCDF var 'time'
+            date_event_end.__setattr__('calendar', ncVar_time.calendar)
+            date_event_end.__setattr__('units', ncVar_time.units)
     
     time_range = util_dt.get_time_range(files=VARS_in_files[var_name[0]], 
                                         time_range=time_range, temporal_var_name=indice_dim[0])
