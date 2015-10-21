@@ -57,7 +57,7 @@ def indice(in_files,
             base_period_time_range=None,
             window_width=5,
             only_leap_years=False,
-            ignore_Feb29th=True,
+            ignore_Feb29th=False,
             interpolation='hyndman_fan', 
             out_unit='days',
             user_indice=None
