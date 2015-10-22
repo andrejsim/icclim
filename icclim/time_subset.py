@@ -409,10 +409,11 @@ def get_indices_temp_aggregation(dt_arr, month, year, f=0):
 ### This function is used for the bootstrapping procedure
 def get_resampled_arrs(dt_arr, values_arr, year_to_eliminate, year_to_duplicate):
     
-    
+    ### "out-of-base" years ---> no resampling
     if year_to_eliminate == year_to_duplicate == -9999:
         return (dt_arr, values_arr)
     
+    ### "in-base" years ---> resampling
     else:
         # step 1: we eliminate in-base year ("year_to_eliminate"), i.e. we subset our arrays (dt and values)
         
