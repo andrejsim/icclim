@@ -333,6 +333,7 @@ def get_max_nb_consecutive_days(arr, logical_operation, thresh, coef=1.0, fill_v
     Used for computing: CSU, CFD, CDD, CWD
     '''
     
+    
     if index_event==True:
         index_event_bounds=[]
     
@@ -440,11 +441,15 @@ def get_nb_events(arr, logical_operation, thresh, fill_val=None, index_event=Fal
     else:    
         return res
 
-    
-### for multivariable indices, e.g. (TX > 25 and TN > 10); (TX > 90p and TN > 20p); (TG > 90p and RR > 75p); etc   
-def get_nb_events_multivar(bin_arrs, link_logical_operation, index_event=False, out_unit="days"):    
+
+
+####### This function returns nb of event of max number of consecutive events for multivariable indices    
+### for multivariable indices, e.g. (TX > 25 and TN > 10); (TX > 25 and TN > 20th pctl); (TX > 90th pctl and TN > 20th pctl); (TG > 90th pctl and RR > 75th pctl); etc   
+def get_nb_events_multivar(bin_arrs, link_logical_operation, fill_val, index_event=False, out_unit="days", max_consecutive=False):    
     # bin_arrs: list with binary arrays
     # link_logical_operation: 'and' or 'or'
+    # max_consecutive=False: we count nb of events
+    # max_consecutive=True: we count max nb of consecutive events
     
     # we initialize 'bin_res' array
     bin_res = bin_arrs[0]
@@ -457,8 +462,59 @@ def get_nb_events_multivar(bin_arrs, link_logical_operation, index_event=False, 
             bin_res = numpy.logical_or(bin_res, bin_arrs[i]) 
             
         i+=1
+    if  max_consecutive==False:   
+        res = numpy.sum(bin_res, axis=0) 
         
-    res = numpy.sum(bin_res, axis=0)    
+    else:  ### max_consecutive==True 
+        ### we pass bin_res to C function
+    
+        ##############
+        assert(isinstance(bin_res, numpy.ndarray)) ### we check if bin_res is not a masked array
+
+        # array data type should be 'float32' to pass it to C function  
+        if bin_res.dtype != 'float32':
+            bin_res = numpy.array(bin_res, dtype='float32')
+        
+        C_find_max_len_consec_sequence_3d = libraryC.find_max_len_consec_sequence_3d
+        C_find_max_len_consec_sequence_3d.restype = None
+        C_find_max_len_consec_sequence_3d.argtypes = [ndpointer(ctypes.c_float), # const float *indata
+                                                        ctypes.c_int, # int _sizeT
+                                                        ctypes.c_int, # int _sizeI
+                                                        ctypes.c_int, # int _sizeJ
+                                                        ndpointer(ctypes.c_double), # double *outdata
+                                                        ctypes.c_float, # float thresh
+                                                        ctypes.c_float, # float fill_val
+                                                        ctypes.c_char_p, # char *operation
+                                                        ndpointer(ctypes.c_int), # int *index_event_start
+                                                        ndpointer(ctypes.c_int), # int *index_event_end
+                                                        ] 
+        
+        res = numpy.zeros([bin_res.shape[1], bin_res.shape[2]]) # reserve memory
+        first_index_event = numpy.zeros([bin_res.shape[1], bin_res.shape[2]], dtype='int32') # reserve memory
+        last_index_event = numpy.zeros([bin_res.shape[1], bin_res.shape[2]], dtype='int32') # reserve memory
+    
+        
+        C_find_max_len_consec_sequence_3d(bin_res, 
+                                          bin_res.shape[0], 
+                                          bin_res.shape[1], 
+                                          bin_res.shape[2], 
+                                          res, 
+                                          1, ### thresh
+                                          fill_val, 
+                                          "e", ### we are looking for a max sequence where values==1
+                                          first_index_event, 
+                                          last_index_event)
+    
+        res = res.reshape(bin_res.shape[1], bin_res.shape[2])
+        first_index_event = first_index_event.reshape(bin_res.shape[1], bin_res.shape[2])
+        last_index_event = last_index_event.reshape(bin_res.shape[1], bin_res.shape[2]) 
+    
+    
+        ##################
+        
+        
+        
+        
         
     if out_unit == "days":
         res = res
@@ -466,10 +522,16 @@ def get_nb_events_multivar(bin_arrs, link_logical_operation, index_event=False, 
         res = res*(100./bin_arrs[0].shape[0])
         
     if index_event==True:
-        first_occurrence_event=get_first_occurrence(bin_res, logical_operation='e', thresh=1)
-        last_occurrence_event=get_last_occurrence(bin_res, logical_operation='e', thresh=1)
-
-        index_event_bounds=[first_occurrence_event, last_occurrence_event]
+        
+        if max_consecutive==False:         
+            first_occurrence_event=get_first_occurrence(bin_res, logical_operation='e', thresh=1)
+            last_occurrence_event=get_last_occurrence(bin_res, logical_operation='e', thresh=1)
+            index_event_bounds=[first_occurrence_event, last_occurrence_event]
+        
+        else:
+            index_event_bounds=[first_index_event,last_index_event]
+        
+        
         
         return [res, index_event_bounds]   
     

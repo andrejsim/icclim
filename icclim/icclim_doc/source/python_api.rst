@@ -545,12 +545,14 @@ Example 7: Custom indice (mean of selected period)
 
 
 Example 8: Custom indice (number of days when tas < 15 degrees Celsius)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note:: If 'calc_operation' is *'max_nb_consecutive_events'*, then max number of consecutive days for the same condition will be computed. 
 
 .. code-block:: python
 
 	my_indice_params = {'indice_name': 'my_indice',
-	                    'calc_operation': 'nb_events',
+	                    'calc_operation': 'nb_events', ### 'calc_operation': 'max_nb_consecutive_events'
 	                    'logical_operation': 'lt',
 	                    'thresh': 15 + 273.15 ### input data in Kelvin ==> threshold in Kelvin!
 	                   }
@@ -564,6 +566,8 @@ Example 8: Custom indice (number of days when tas < 15 degrees Celsius)
 Example 9: Custom indice (percentage of days when tasmax > 80th pctl + date)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+.. note:: If 'calc_operation' is *'max_nb_consecutive_events'*, then max number of consecutive days for the same condition will be computed. 
+
 .. note:: 80th pctl: 80th percentile of tasmax in base period
 
 .. note:: Two additional variables will be created in output netCDF file: "date_event_start" (the date of the first occurence of tasmax > 80th pctl) and "date_event_end" (the date of the last occurence of tasmax > 80th pctl).
@@ -571,7 +575,7 @@ Example 9: Custom indice (percentage of days when tasmax > 80th pctl + date)
 .. code-block:: python
 
 	my_indice_params = {'indice_name': 'my_indice',
-	                    'calc_operation': 'nb_events',
+	                    'calc_operation': 'nb_events', ### 'calc_operation': 'max_nb_consecutive_events'
 	                    'logical_operation': 'gt',
 	                    'thresh': 'p80',
 	                    'var_type': 't',
@@ -587,13 +591,17 @@ Example 9: Custom indice (percentage of days when tasmax > 80th pctl + date)
 
 Example 10: Custom indice (number of days when daily precipitation amount > 85th pctl)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note:: If 'calc_operation' is *'max_nb_consecutive_events'*, then max number of consecutive days for the same condition will be computed. 
+
 .. note:: daily precipitation amount: daily precipitation amount on a wet day (RR >= 1.0 mm)
+
 .. note:: 85th pctl: percentile of precipitation on wet days in base period
 
 .. code-block:: python
 
 	my_indice_params = {'indice_name': 'my_indice',
-	                    'calc_operation': 'nb_events',
+	                    'calc_operation': 'nb_events', ### 'calc_operation': 'max_nb_consecutive_events'
 	                    'logical_operation': 'gt',
 	                    'thresh': 'p85',
 	                    'var_type': 'p'	                    
@@ -685,13 +693,15 @@ Example 14: Custom indice (anomaly of tasmax between 2 period of 30 years)
 	icclim.indice(user_indice=my_indice_params, in_files=file_tasmax, var_name='tasmax', time_range=tr, out_file=out_f, callback=callback.defaultCallback2)
 
 
-Example 15: Custom indice (number of days when tasmin >= 10 degrees Celsius and tasmax > 25 degrees Celsius)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Example 15: Multivariable custom indice (number of days when tasmin >= 10 degrees Celsius and tasmax > 25 degrees Celsius)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note:: If 'calc_operation' is *'max_nb_consecutive_events'*, then max number of consecutive days for the same condition will be computed. 
 
 .. code-block:: python
 
 	my_indice_params = {'indice_name': 'my_indice',
-	                    'calc_operation': 'nb_events',
+	                    'calc_operation': 'nb_events', ### 'calc_operation': 'max_nb_consecutive_events'
 	                    'logical_operation': ['get', 'gt'],
 	                    'thresh': [10+273.15, 25+273.15], ### input data in Kelvin ==> threshold in Kelvin!
 	                    'link_logical_operations': 'and'	                    
@@ -704,18 +714,20 @@ Example 15: Custom indice (number of days when tasmin >= 10 degrees Celsius and 
 	icclim.indice(user_indice=my_indice_params, in_files=[file_tasmin, file_tasmax], var_name=['tasmin', 'tasmax'], slice_mode='JJA', out_unit='days', out_file=out_f, callback=callback.defaultCallback2)
 
 
-Example 16: Custom indice (percentage of days when tasmin >= 10 degrees Celsius and tasmax > 90th pctl   + date)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Example 16: Multivariable custom indice (percentage of days when tasmin >= 10 degrees Celsius and tasmax > 90th pctl   + date)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note:: If 'calc_operation' is *'max_nb_consecutive_events'*, then max number of consecutive days for the same condition will be computed. 
 
 .. note:: It is possible to use numeric and percentile threshold at the time.
 
 .. code-block:: python
 
 	my_indice_params = {'indice_name': 'my_indice',
-	                    'calc_operation': 'nb_events',
+	                    'calc_operation': 'nb_events', ### 'calc_operation': 'max_nb_consecutive_events'
 	                    'logical_operation': ['get', 'gt'],
 	                    'thresh': [10+273.15, 'p90'], ### input data in Kelvin ==> threshold in Kelvin!
-	                    'var_type': 't', 			 ### if at least one threshold is percentile, then 'var_type' is required
+	                    'var_type': 't',  ### or ['-','t']
 	                    'link_logical_operations': 'and',
 	                    'date_event': True
 	                   }
@@ -730,8 +742,11 @@ Example 16: Custom indice (percentage of days when tasmin >= 10 degrees Celsius 
 
 .. _examples_CD_CW_WD_WW_label:
 
-Example 17: CW as custom indice (number of days when tas < 25th pctl and precip. > 75th pctl)
+Example 17: CW as a custom indice (number of days when tas < 25th pctl and precip. > 75th pctl)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note:: If 'calc_operation' is *'max_nb_consecutive_events'*, then max number of consecutive days for the same condition will be computed. 
+
 4 compound indices defined in http://eca.knmi.nl/documents/atbd.pdf (see the section 5.3.3 "Compound indices") are 
 based on daily precipitation (RR) and mean temperature (TG) variables:
 
@@ -748,7 +763,7 @@ based on daily precipitation (RR) and mean temperature (TG) variables:
 .. code-block:: python
 
 	my_indice_params = {'indice_name': 'my_indice',
-	                    'calc_operation': 'nb_events',
+	                    'calc_operation': 'nb_events', ### 'calc_operation': 'max_nb_consecutive_events'
 	                    'logical_operation': ['lt', 'gt'],
 	                    'thresh': ['p25', 'p75'], 
 	                    'var_type': ['t', 'p'],
@@ -762,12 +777,15 @@ based on daily precipitation (RR) and mean temperature (TG) variables:
 	bp = [datetime.datetime(1960,01,01), datetime.datetime(1969,12,31)]
 	icclim.indice(user_indice=my_indice_params, in_files=[file_tas, file_pr], var_name=['tas', 'pr'], slice_mode='year', out_unit='days', base_period_time_range=bp, out_file=out_f, callback=callback.defaultCallback2)
 
-Example 18: Custom indice (number of days when tasmax > 90th pctl and tasmin >= 10 and precipitation < 30th pctl)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Example 18: Multivariable custom indice (number of days when tasmax > 90th pctl and tasmin >= 10 and precipitation < 30th pctl)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note:: If 'calc_operation' is *'max_nb_consecutive_events'*, then max number of consecutive days for the same condition will be computed.
+
 .. code-block:: python
 
 	my_indice_params = {'indice_name': 'my_indice',
-                            'calc_operation': 'nb_events',
+                            'calc_operation': 'nb_events', ### 'calc_operation': 'max_nb_consecutive_events'
                             'logical_operation': ['gt', 'get', 'lt'],
                             'thresh': ['p90', 10+273.15, 'p30'], 
                             'var_type': ['t', '-', 'p'],

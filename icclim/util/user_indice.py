@@ -12,7 +12,7 @@ map_calc_params_required = {
                               'sum': [],
                               'mean': [],
                               'nb_events': ['logical_operation', 'thresh'], # 'link_logical_operations' ('and' or 'or' ) is required if multivariable indice
-                              'max_nb_consecutive_events': ['logical_operation', 'thresh'],
+                              'max_nb_consecutive_events': ['logical_operation', 'thresh'], # 'link_logical_operations' ('and' or 'or' ) is required if multivariable indice
                               'run_mean': ['extreme_mode', 'window_width'],
                               'run_sum': ['extreme_mode', 'window_width'],
                               'anomaly': ['ref_time_range'] # past period
@@ -50,7 +50,7 @@ def check_params(user_indice, time_range=None, vars=None):
     if (calc_op not in ['max', 'min', 'mean', 'sum']) and (set(required_params).intersection(given_params) != set(required_params)):
         raise IOError('All theses parameters are required: {0}'.format(required_params))
     
-    if calc_op=='nb_events' and type(user_indice['thresh'])==str:
+    if calc_op in ['nb_events','max_nb_consecutive_events'] and type(user_indice['thresh'])==str:
         if ('var_type') not in user_indice.keys():
             raise IOError("If threshold value is a percentile,  'var_type' is required.")
         
@@ -59,7 +59,7 @@ def check_params(user_indice, time_range=None, vars=None):
             raise IOError(" 'time_range' is required for anomalies computing.")
         
     if type(vars) is list and len(vars)>1:
-        if calc_op=='nb_events':
+        if calc_op in ['nb_events','max_nb_consecutive_events']:
             if type(user_indice['logical_operation']) is not list    or    type(user_indice['thresh']) is not list:
                 raise IOError("If indice is based on {0} variables, then {0} 'logical_operations' and {0} 'thresh' " 
                               "are required (each one must be a list with {0} elements).".format(len(vars)) )
@@ -202,7 +202,7 @@ def get_user_indice(user_indice, arr, fill_val, vars, out_unit='days', dt_arr=No
                                 fill_val=fill_val,
                                 index_event=obj.date_event)
         
-            elif obj.calc_operation == 'nb_events':
+            elif obj.calc_operation in ['nb_events', 'max_nb_consecutive_events']:
                 
                 # WARNING: if precipitation var ===>  values < 1.0 mm must be filtered
 
@@ -211,26 +211,38 @@ def get_user_indice(user_indice, arr, fill_val, vars, out_unit='days', dt_arr=No
                 else:          
                     thresh_=pctl_thresh
                 
-                # get_nb_events(arr, logical_operation, thresh, fill_val=None, index_event=False, out_unit="days", dt_arr=None, coef=1.0)
-                res = calc.get_nb_events(arr=arr, 
-                                    logical_operation=obj.logical_operation, 
-                                    thresh=thresh_, 
-                                    fill_val=fill_val, 
-                                    index_event=obj.date_event, 
-                                    out_unit=out_unit, 
-                                    dt_arr=dt_arr, 
-                                    coef=obj.coef)
+                if obj.calc_operation == 'nb_events':
+                    # get_nb_events(arr, logical_operation, thresh, fill_val=None, index_event=False, out_unit="days", dt_arr=None, coef=1.0)
+                    res = calc.get_nb_events(arr=arr, 
+                                        logical_operation=obj.logical_operation, 
+                                        thresh=thresh_, 
+                                        fill_val=fill_val, 
+                                        index_event=obj.date_event, 
+                                        out_unit=out_unit, 
+                                        dt_arr=dt_arr, 
+                                        coef=obj.coef)
     
                                 
-            elif obj.calc_operation == 'max_nb_consecutive_events':
-                # get_max_nb_consecutive_days(arr, logical_operation, thresh, coef=1.0, fill_val=None, index_event=False)
-                res = calc.get_max_nb_consecutive_days(arr, 
-                                                  logical_operation=obj.logical_operation, 
-                                                  thresh=obj.thresh, 
-                                                  coef=obj.coef, 
-                                                  fill_val=fill_val, 
-                                                  index_event=obj.date_event,
-                                                  out_unit=out_unit)       
+                elif obj.calc_operation == 'max_nb_consecutive_events':
+                    # get_max_nb_consecutive_days(arr, logical_operation, thresh, coef=1.0, fill_val=None, index_event=False)
+                    
+                    ### we create a binary array
+                    bin_arr = calc.get_binary_arr(arr=arr, 
+                                                 logical_operation=obj.logical_operation, 
+                                                 thresh=thresh_, 
+                                                 dt_arr=dt_arr,
+                                                 fill_val = fill_val)
+                   
+                    
+                    ### we pass it to C function with logical_operation='e' (==) and thresh=1 
+                    ### to compute max sequence of 1
+                    res = calc.get_max_nb_consecutive_days(bin_arr, 
+                                                      logical_operation='e', 
+                                                      thresh=1, 
+                                                      coef=obj.coef, 
+                                                      fill_val=fill_val, 
+                                                      index_event=obj.date_event,
+                                                      out_unit=out_unit)       
                 
                 
             elif obj.calc_operation in ['run_mean', 'run_sum']:
@@ -282,12 +294,19 @@ def get_user_indice(user_indice, arr, fill_val, vars, out_unit='days', dt_arr=No
             binary_arrs.append(bin_arr)
 
 
-        # get_nb_events_multivar(bin_arrs, link_logical_operation, index_event=False, out_unit="days", dt_arr=None)
+        # get_nb_events_multivar(bin_arrs, link_logical_operation, fill_val, index_event=False, out_unit="days", max_consecutive=False):
+        if obj.calc_operation == 'nb_events':            
+            mc = False
+        
+        elif  obj.calc_operation == 'max_nb_consecutive_events':
+            mc = True
+        
         res = calc.get_nb_events_multivar(bin_arrs=binary_arrs, 
-                                          link_logical_operation=obj.link_logical_operation,
-                                          index_event=obj.date_event,
-                                          out_unit=out_unit)
-            
+                                  link_logical_operation=obj.link_logical_operation,
+                                  fill_val = fill_val[vars[0]], ### fill_val is only to pass it to C function (for 'max_nb_consecutive_events')
+                                  index_event=obj.date_event,
+                                  out_unit=out_unit,
+                                  max_consecutive=mc)      
     
     
     return res
