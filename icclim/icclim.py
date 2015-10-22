@@ -258,7 +258,7 @@ def indice(in_files,
             date_event.__setattr__('calendar', ncVar_time.calendar)
             date_event.__setattr__('units', ncVar_time.units)
             
-        elif user_indice['calc_operation'] in ['nb_events', 'max_number_consecutive_events', 'run_mean', 'run_sum']:
+        elif user_indice['calc_operation'] in ['nb_events', 'max_nb_consecutive_events', 'run_mean', 'run_sum']:
             date_event_start = onc.createVariable('date_event_start', 'f', indice_dim, fill_value = fill_val)
             # we set the same 'calendar' and 'units' attributes as those of netCDF var 'time'
             date_event_start.__setattr__('calendar', ncVar_time.calendar)
@@ -523,7 +523,7 @@ def indice(in_files,
                     if user_indice['calc_operation'] in ['min', 'max']:            
                         date_event_arr_current_chunk = indice_tuple_current_chunk[3]
                         
-                    elif user_indice['calc_operation'] in ['nb_events', 'max_number_consecutive_events', 'run_mean', 'run_sum']:
+                    elif user_indice['calc_operation'] in ['nb_events', 'max_nb_consecutive_events', 'run_mean', 'run_sum']:
                         date_event_start_arr_current_chunk = indice_tuple_current_chunk[3]
                         date_event_end_arr_current_chunk = indice_tuple_current_chunk[4]
                         
@@ -594,7 +594,7 @@ def indice(in_files,
         if user_indice['date_event']==True:
             if user_indice['calc_operation'] in ['min', 'max']:            
                 date_event[:,:,:] = date_event_arr_current_chunk
-            elif user_indice['calc_operation'] in ['nb_events', 'max_number_consecutive_events', 'run_mean', 'run_sum']:
+            elif user_indice['calc_operation'] in ['nb_events', 'max_nb_consecutive_events', 'run_mean', 'run_sum']:
                 date_event_start[:,:,:] = date_event_start_arr_current_chunk
                 date_event_end[:,:,:] = date_event_end_arr_current_chunk
             

@@ -12,7 +12,7 @@ map_calc_params_required = {
                               'sum': [],
                               'mean': [],
                               'nb_events': ['logical_operation', 'thresh'], # 'link_logical_operations' ('and' or 'or' ) is required if multivariable indice
-                              'max_number_consecutive_events': ['logical_operation', 'thresh'],
+                              'max_nb_consecutive_events': ['logical_operation', 'thresh'],
                               'run_mean': ['extreme_mode', 'window_width'],
                               'run_sum': ['extreme_mode', 'window_width'],
                               'anomaly': ['ref_time_range'] # past period
@@ -25,7 +25,7 @@ map_calc_params_optional = {
                               'sum': ['coef', 'logical_operation', 'thresh'], 
                               'mean': ['coef', 'logical_operation', 'thresh'], 
                               'nb_events': ['coef', 'date_event'],
-                              'max_number_consecutive_events': ['coef', 'date_event'],
+                              'max_nb_consecutive_events': ['coef', 'date_event'],
                               'run_mean': ['coef', 'date_event'],
                               'run_sum': ['coef', 'date_event'],
                               'anomaly': []
@@ -222,7 +222,7 @@ def get_user_indice(user_indice, arr, fill_val, vars, out_unit='days', dt_arr=No
                                     coef=obj.coef)
     
                                 
-            elif obj.calc_operation == 'max_number_consecutive_events':
+            elif obj.calc_operation == 'max_nb_consecutive_events':
                 # get_max_nb_consecutive_days(arr, logical_operation, thresh, coef=1.0, fill_val=None, index_event=False)
                 res = calc.get_max_nb_consecutive_days(arr, 
                                                   logical_operation=obj.logical_operation, 

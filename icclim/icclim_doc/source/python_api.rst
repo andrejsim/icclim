@@ -361,7 +361,7 @@ value									description
 'sum'									sum
 'mean'									mean
 'nb_events'								number of events satisfying the selected condition
-'max_number_consecutive_events'			maximum number of consecutive_events satisfying the selected condition
+'max_nb_consecutive_events'             maximum number of consecutive events satisfying the selected condition
 'run_mean'								max or min of running mean
 'run_sum'								max or min of running sum 
 'anomaly'								mean(future period) - mean(past period)
@@ -413,7 +413,7 @@ Correspondence table "cal_operation" -- required/optional parameters:
 |                               |'var_type'                     |                       |
 |                               |(if percentile-based indices)  |                       |
 +-------------------------------+-------------------------------+-----------------------+
-|'max_number_consecutive_events'|'logical_operation',           |'coef',                |
+|'max_nb_consecutive_events'    |'logical_operation',           |'coef',                |
 |                               |'thresh'                       |'date_event'           |
 |                               |                               |                       |
 +-------------------------------+-------------------------------+-----------------------+
@@ -615,7 +615,7 @@ Example 11: Custom indice (max number of consecutive days when tasmax >= 25 degr
 .. code-block:: python
 
 	my_indice_params = {'indice_name': 'my_indice',
-	                    'calc_operation': 'max_number_consecutive_events',
+	                    'calc_operation': 'max_nb_consecutive_events',
 	                    'logical_operation': 'get',
 	                    'thresh': 25 + 273.15, ### input data in Kelvin ==> threshold in Kelvin!
 	                    'date_event': True
